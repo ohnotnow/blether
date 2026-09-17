@@ -14,6 +14,10 @@ struct AdvancedSection: View {
                 Text("Merged into every LLM request. Ollama users put {\"reasoning_effort\": \"none\"} here to stop a reasoning model spending a minute thinking about a 40-word summary.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                TextField("uv path", text: $settings.uvPath)
+                Text("Leave empty to look in the usual places. Takes effect at the next launch.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }

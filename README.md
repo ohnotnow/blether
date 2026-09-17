@@ -14,14 +14,15 @@ for a long chatty back-and-forth.
 
 ## Status
 
-Slice 3. Apple system voices, one LLM that writes a short Marvin preamble and
-compresses long replies for listening, and a settings window for the lot: the
-LLM endpoint, model and key, your personas, a voice and persona per role, and
-switches for speaking, the preamble and the reply. No listening yet. A Claude
-Code Stop hook posts the reply to the app and you hear it, replies queue
-rather than talk over each other, and a hotkey stops everything. More
-providers (ElevenLabs, OpenAI, xAI, Mistral, Kokoro on MLX) and the rest are
-on the way.
+Slice 6. The voice is [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-bf16)
+running locally on Apple Silicon through MLX, one LLM writes a short Marvin
+preamble and compresses long replies for listening, and a settings window
+covers the lot: the LLM endpoint, model and key, your personas, a voice and
+persona per role, and switches for speaking, the preamble and the reply. No
+listening yet. A Claude Code Stop hook posts the reply to the app and you
+hear it, replies queue rather than talk over each other, and a hotkey stops
+everything. More providers (ElevenLabs, OpenAI, xAI, Mistral) and the rest
+are on the way.
 
 ## The LLM
 
@@ -48,6 +49,25 @@ With Ollama and a reasoning model this one is worth having, otherwise a
 
 (`"low"` and Ollama's own `"think": false` were tried and did not stop the
 thinking on the compatible endpoint; `"none"` did.)
+
+## Kokoro
+
+Kokoro runs in a small Python helper that blether starts when it launches and
+stops when it quits. You need [uv](https://docs.astral.sh/uv/) installed:
+
+```sh
+brew install uv
+```
+
+The first launch downloads the model (about 340 MB) into your Hugging Face
+cache and builds the helper's environment, which takes a minute or two; the
+menubar says "Kokoro: warming up" until it is ready. After that the helper
+stays warm, so a reply is spoken within a second of the words being ready.
+It uses about 670 MB of memory while blether runs and is gone when you quit.
+
+Voices are Kokoro's own, grouped by language in Settings. If blether cannot
+find uv, the menubar says so and Settings > Advanced has a field for its
+path.
 
 ## Build
 
@@ -111,8 +131,8 @@ your way.
 A persona is a name and a one-line character description that slots into
 "in the voice of...". Marvin ships as the default and you can add your own in
 the Voices and personas section of the settings window. Each role, the
-preamble and the reply, gets a persona (or none) and one of the Apple voices
-installed on your Mac, grouped by language.
+preamble and the reply, gets a persona (or none) and one of Kokoro's voices,
+grouped by language.
 
 ## Stop talking
 
@@ -134,20 +154,33 @@ Two smaller switches live in the Behaviour section of Settings: "Preamble"
 drops the in-character line, and "Reply" drops the reply itself so you hear
 only the preamble.
 
+## Logs
+
+blether writes one line per event to `~/Library/Logs/blether.log`: each hook
+that arrives, what the LLM wrote, what Kokoro rendered and how long it took,
+and anything that failed. When the file passes 5 MB at launch it is renamed
+`blether.log.1` and a fresh one starts. Console.app shows it too.
+
 ## How it works
 
 The app listens on `127.0.0.1:8765`. The hook is a one-line curl that posts
 the Stop payload to `/hook`. The app pulls out the reply and strips the
 markdown. The LLM writes a one-line preamble in Marvin's voice and, for
 replies over 60 words, a compressed version of the reply. Each line is
-rendered to audio with an Apple voice and added to a queue that plays one
-clip at a time. A reply that arrives while audio is already playing skips
-the preamble. Everything happens inside the app, so there is nothing else
-to install and nothing to keep running.
+rendered to audio by Kokoro and added to a queue that plays one clip at a
+time. A reply that arrives while audio is already playing skips the
+preamble.
+
+Kokoro lives in `Helpers/kokoro.py`, bundled into the app and run with
+`uv run`. The app talks to it in JSON lines over stdin and stdout: the
+helper announces `ready` with its voices once the model is loaded and warm,
+then each request carries text, a voice id and a file path, and each reply
+says whether the WAV was written. That file is the reference for wiring a
+different local model to the same protocol.
 
 What blether keeps in `UserDefaults` (domain `uk.ohnotnow.blether`):
 `llmBaseURL`, `llmModel`, `llmExtraBody`, `personas`, `roles`, `isEnabled`,
-`speaksPreamble`, `speaksMainReply`, and the two shortcuts under
+`speaksPreamble`, `speaksMainReply`, `uvPath`, and the two shortcuts under
 `KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. The
 LLM key is in Keychain only.
 

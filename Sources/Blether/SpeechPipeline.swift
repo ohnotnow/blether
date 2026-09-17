@@ -55,13 +55,13 @@ final class SpeechPipeline: Sendable {
 
         let clips = await ReplyPlanner(llm: snapshot.llm).plan(
             text, monologuePersona: snapshot.monologuePersona, mainPersona: snapshot.mainPersona,
-            includePreamble: includePreamble, includeMain: snapshot.speaksMainReply
+            includePreamble: includePreamble, includeMain: snapshot.speaksMainReply, mainCap: provider.maxMainCharacters
         )
 
         // Synthesise concurrently, but hand clips to the queue in planned order as each becomes ready.
         await withTaskGroup(of: (Int, Result<AudioClip, Error>).self) { group in
             for (index, clip) in clips.enumerated() {
-                let voice = snapshot.voices[clip.role] ?? AppleVoicesProvider.defaultVoiceID()
+                let voice = snapshot.voices[clip.role] ?? KokoroProvider.defaultVoiceID
                 group.addTask { [provider] in
                     do { return (index, .success(try await provider.synthesise(clip.text, voice: voice))) }
                     catch { return (index, .failure(error)) }

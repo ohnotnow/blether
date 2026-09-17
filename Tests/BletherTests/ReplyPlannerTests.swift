@@ -7,8 +7,15 @@ final class ReplyPlannerTests: XCTestCase {
     private let short = "Done. Two files changed and the tests pass."
     private let long = Array(repeating: "word", count: 70).joined(separator: " ")
 
-    private func plan(_ text: String, monologue: Persona? = .marvin, main: Persona? = nil, preamble: Bool = true, mainReply: Bool = true) async -> [PlannedClip] {
-        await planner.plan(text, monologuePersona: monologue, mainPersona: main, includePreamble: preamble, includeMain: mainReply)
+    private func plan(_ text: String, monologue: Persona? = .marvin, main: Persona? = nil, preamble: Bool = true, mainReply: Bool = true, cap: Int = 800) async -> [PlannedClip] {
+        await planner.plan(text, monologuePersona: monologue, mainPersona: main, includePreamble: preamble, includeMain: mainReply, mainCap: cap)
+    }
+
+    func testMainClipUsesTheProvidersLargerCap() async {
+        llm.summaryScript = { _ in "" }
+        let text = Array(repeating: "abcdefghi", count: 200).joined(separator: " ")
+        let clips = await plan(text, preamble: false, cap: 3000)
+        XCTAssertEqual(clips[0].text, text, "2000 characters fit under a 3000 cap uncut")
     }
 
     func testMainOffReturnsOnlyThePreambleAndNeverSummarises() async {

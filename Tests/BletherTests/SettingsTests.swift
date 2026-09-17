@@ -27,10 +27,23 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(settings.personas, [Persona.marvin])
         XCTAssertNil(settings.roles[.main]?.personaID)
         XCTAssertEqual(settings.roles[.monologue]?.personaID, "marvin")
-        let voice = AppleVoicesProvider.defaultVoiceID()
+        let voice = KokoroProvider.defaultVoiceID
         XCTAssertEqual(settings.roles[.main]?.voiceID, voice)
         XCTAssertEqual(settings.roles[.monologue]?.voiceID, voice)
         XCTAssertEqual(settings.voiceID(for: .main), voice)
+    }
+
+    @MainActor func testStoredAppleVoiceIdFallsBackToKokoroDefault() {
+        let settings = settings
+        settings.roles = [.main: RoleSettings(personaID: nil, voiceID: "com.apple.voice.compact.en-GB.Daniel")]
+        XCTAssertEqual(settings.voiceID(for: .main), KokoroProvider.defaultVoiceID)
+        XCTAssertEqual(settings.voiceID(for: .monologue), KokoroProvider.defaultVoiceID, "missing role also falls back")
+    }
+
+    @MainActor func testUVPathDefaultsEmptyAndRoundTrips() {
+        XCTAssertEqual(settings.uvPath, "")
+        settings.uvPath = "/somewhere/uv"
+        XCTAssertEqual(settings.uvPath, "/somewhere/uv")
     }
 
     @MainActor func testTogglesDefaultToOn() {

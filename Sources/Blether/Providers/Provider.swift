@@ -15,6 +15,9 @@ struct AudioClip: Sendable {
 protocol Provider: Sendable {
     /// Short lowercase identifier: "apple", "elevenlabs", ...
     var name: String { get }
+    /// Longest reply clip this provider should be asked for, in characters. Local synthesis is free
+    /// so Kokoro allows 3000; API providers that bill per character set less.
+    var maxMainCharacters: Int { get }
     func voices() async throws -> [Voice]
     func synthesise(_ text: String, voice: String) async throws -> AudioClip
 }

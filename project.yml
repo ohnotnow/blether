@@ -21,6 +21,8 @@ targets:
     platform: macOS
     sources:
       - Sources/Blether
+      - path: Helpers/kokoro.py
+        buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
     settings:

@@ -14,6 +14,7 @@ final class AppSettings {
         static let isEnabled = "isEnabled"
         static let speaksPreamble = "speaksPreamble"
         static let speaksMainReply = "speaksMainReply"
+        static let uvPath = "uvPath"
     }
     private static let llmKeyAccount = "llm"
 
@@ -86,6 +87,12 @@ final class AppSettings {
         set { defaults.set(newValue, forKey: Key.speaksMainReply); revision += 1 }
     }
 
+    /// Where `uv` lives, when it is not in one of the usual places. Empty means look for it.
+    var uvPath: String {
+        get { _ = revision; return defaults.string(forKey: Key.uvPath) ?? "" }
+        set { defaults.set(newValue, forKey: Key.uvPath); revision += 1 }
+    }
+
     /// A Bool that defaults to true when unset; `bool(forKey:)` alone would default to false.
     private func flag(_ key: String) -> Bool {
         _ = revision
@@ -123,8 +130,10 @@ final class AppSettings {
         return personas.first { $0.id == id }
     }
 
+    /// Voice ids from the Apple-voices scaffolding (slices 1 to 3) are not Kokoro's; fall back rather than have the helper refuse them.
     func voiceID(for role: Role) -> String {
-        roles[role]?.voiceID ?? AppleVoicesProvider.defaultVoiceID()
+        guard let stored = roles[role]?.voiceID, !stored.hasPrefix("com.apple.") else { return KokoroProvider.defaultVoiceID }
+        return stored
     }
 
     var llmAPIKey: String? {
@@ -148,7 +157,7 @@ final class AppSettings {
     var hasLLMKey: Bool { llmAPIKey != nil }
 
     private static func defaultRoles() -> [Role: RoleSettings] {
-        let voice = AppleVoicesProvider.defaultVoiceID()
+        let voice = KokoroProvider.defaultVoiceID
         return [
             .main: RoleSettings(personaID: nil, voiceID: voice),
             .monologue: RoleSettings(personaID: Persona.marvin.id, voiceID: voice),

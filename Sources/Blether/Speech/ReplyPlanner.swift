@@ -10,14 +10,14 @@ struct PlannedClip: Equatable, Sendable {
 /// reformat_text from claude-speaks' providers/openai.py, once, for every provider.
 struct ReplyPlanner: Sendable {
     static let summaryWordThreshold = 60
-    static let mainCap = 800
     static let preambleCap = 200
 
     let llm: any LLM
 
     /// `text` is already markdown-stripped and non-empty. With `includeMain` false the summariser is
     /// never called and only the preamble (if any) comes back; a preamble failure is then log only.
-    func plan(_ text: String, monologuePersona: Persona?, mainPersona: Persona?, includePreamble: Bool, includeMain: Bool) async -> [PlannedClip] {
+    /// `mainCap` is the provider's `maxMainCharacters`.
+    func plan(_ text: String, monologuePersona: Persona?, mainPersona: Persona?, includePreamble: Bool, includeMain: Bool, mainCap: Int) async -> [PlannedClip] {
         async let preambleResult = preamble(for: text, persona: includePreamble ? monologuePersona : nil)
         let summary: Result<String, RoleFailure>? = includeMain ? await self.summary(of: text, persona: mainPersona) : nil
         let preamble = await preambleResult
@@ -33,7 +33,7 @@ struct ReplyPlanner: Sendable {
         if !failed.isEmpty {
             main = "Heads up, the \(failed.joined(separator: " and ")) call fell over. Raw reply coming up. " + main
         }
-        clips.append(PlannedClip(text: SpeechText.cap(main, limit: Self.mainCap), role: .main))
+        clips.append(PlannedClip(text: SpeechText.cap(main, limit: mainCap), role: .main))
         return clips
     }
 

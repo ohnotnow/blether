@@ -5,6 +5,7 @@ import XCTest
 private final class RecordingProvider: Provider, @unchecked Sendable {
     struct Call: Equatable { let text: String; let voice: String; let url: URL }
     let name = "recording"
+    let maxMainCharacters = 800
     private let lock = NSLock()
     private var recorded: [Call] = []
     var failOnTextContaining: String?
@@ -24,6 +25,7 @@ private final class RecordingProvider: Provider, @unchecked Sendable {
 /// Simulates the user pressing stop while synthesis is still running.
 private struct StopsMidSynthesisProvider: Provider {
     let name = "stopping"
+    let maxMainCharacters = 800
     let queue: PlaybackQueue
     func voices() async throws -> [Voice] { [] }
     func synthesise(_ text: String, voice: String) async throws -> AudioClip {

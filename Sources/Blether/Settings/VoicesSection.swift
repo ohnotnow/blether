@@ -4,6 +4,7 @@ import SwiftUI
 /// voice speaks them. Voices load once, off the render path; there are about 180 of them.
 struct VoicesSection: View {
     @Bindable var settings: AppSettings
+    let provider: any Provider
     @State private var voices: [Voice] = []
     @State private var voicesFailed = false
     @State private var editing: PersonaEditor.Mode?
@@ -20,7 +21,7 @@ struct VoicesSection: View {
             if voicesFailed { Text("Could not load voices") }
         }
         .task {
-            do { voices = try await AppleVoicesProvider().voices() } catch { voicesFailed = true }
+            do { voices = try await provider.voices() } catch { voicesFailed = true }
         }
         .sheet(item: $editing) { mode in
             PersonaEditor(mode: mode) { name, description in
@@ -105,6 +106,6 @@ struct VoicesSection: View {
     }
 
     private static func fallback() -> RoleSettings {
-        RoleSettings(personaID: nil, voiceID: AppleVoicesProvider.defaultVoiceID())
+        RoleSettings(personaID: nil, voiceID: KokoroProvider.defaultVoiceID)
     }
 }
