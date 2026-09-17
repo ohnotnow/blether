@@ -2,11 +2,11 @@
 
 Hello. You are in blether, a macOS menubar app in Swift that speaks Claude
 CLI replies aloud. It is the successor to two Python projects, claude-speaks
-and claude-listens. As of 2026-09-17 slices 1 to 3 and 6 are built: the
+and claude-listens. As of 2026-09-17 slices 1 to 3, 6 and 7 are built: the
 hook listener, a playback queue with a stop hotkey, one LLM that writes a
 persona preamble and compresses long replies, a settings window with a
-master on/off switch, and Kokoro-82M on MLX as the voice, run in a resident
-Python helper. Listening and further speech providers are still to come. README.md says what the app does; this file says how we
+master on/off switch, Kokoro-82M on MLX as the voice, run in a resident
+Python helper, and profiles with remote mode. Listening and further speech providers are still to come. README.md says what the app does; this file says how we
 work on it.
 
 The thinking behind the design is written down in `ant`, so you do not have
@@ -30,13 +30,16 @@ to re-derive it or, worse, re-argue it.
    (Python helper versus a native Swift port; the user has no voice-language
    preference), and `blether-9X77J` (the voice is timbre, the lang code is
    the language of the text; do not derive one from the other).
-6. The latest handover note (`ant list`, the newest "Handover" title). It
+6. The slice 7 notes: `ant show blether-7qsQV` (profiles: the user's
+   decisions and Claude's leans) and `blether-csm6b` (no shared secret,
+   LAN-only).
+7. The latest handover note (`ant list`, the newest "Handover" title). It
    says where things stand and what is next.
-7. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
+8. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
    An informal notepad of macOS Swift gotchas from earlier projects, not
    rules. blether departs from it in one place: no App Sandbox (see the
    decisions table for why).
-8. Only if you need the history and have the sibling checkouts:
+9. Only if you need the history and have the sibling checkouts:
    `../claude-speaks` has `ant show cs-XKtxA` and `ant show cs-Ed6UZ` (the
    two conversations that shaped the rewrite), and `../claude-listens` has
    `TECHNICAL_OVERVIEW.md` for the channels wire contract.
@@ -66,10 +69,17 @@ The speech **roles** are main (the reply), monologue (the in-character
 preamble) and, from slice 4, notification. In the settings window they are
 shown as Reply and Preamble.
 
+A **profile** is a named voice and persona per role. A hook picks one with
+`?profile=<name>` on the hook URL; the default profile speaks when none is
+named or the name is unknown. Not "source": that was the earlier sketch.
+Remote mode has no shared secret; blether is LAN-only (`ant show
+blether-csm6b`).
+
 ## Layout
 
 - `Sources/Blether/`: `BletherApp.swift` wires everything at launch.
-  `HookServer` listens on 127.0.0.1:8765, `SpeechPipeline` turns a reply
+  `HookServer` listens on 127.0.0.1:8765 (or every interface when "Listen
+  on the network" is on) and reads `?profile=`, `SpeechPipeline` turns a reply
   into clips via `Speech/ReplyPlanner`, `Providers/` synthesise them
   (`KokoroProvider` over `HelperProcess`, which keeps `Helpers/kokoro.py`
   alive and talks JSON lines to it), `PlaybackQueue` plays them one at a

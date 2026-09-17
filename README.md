@@ -12,14 +12,20 @@ choice here protects it. blether is the successor to two Python projects,
 claude-speaks and claude-listens, rebuilt as one Swift app. The name is Scots
 for a long chatty back-and-forth.
 
+blether is a LAN-only tool. Out of the box it listens on this Mac alone.
+Turn on "Listen on the network" and it accepts replies from any machine on
+your network with no password or token, so keep it on a network you trust
+and never expose the port to the internet.
+
 ## Status
 
 Slice 6. The voice is [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-bf16)
 running locally on Apple Silicon through MLX, one LLM writes a short Marvin
 preamble and compresses long replies for listening, and a settings window
-covers the lot: the LLM endpoint, model and key, your personas, a voice and
-persona per role, and switches for speaking, the preamble and the reply. No
-listening yet. A Claude Code Stop hook posts the reply to the app and you
+covers the lot: the LLM endpoint, model and key, your personas, profiles
+with a voice and persona per role, and switches for speaking, the preamble,
+the reply and listening on the network. A hook on another machine, or in
+one project, picks its profile by URL. No listening yet. A Claude Code Stop hook posts the reply to the app and you
 hear it, replies queue rather than talk over each other, and a hotkey stops
 everything. More providers (ElevenLabs, OpenAI, xAI, Mistral) and the rest
 are on the way.
@@ -134,6 +140,59 @@ the Voices and personas section of the settings window. Each role, the
 preamble and the reply, gets a persona (or none) and one of Kokoro's voices,
 grouped by language.
 
+## Profiles
+
+A profile is a name plus a voice and persona for each role. A fresh install
+has one, called Default. Add more in the Profiles, voices and personas
+section of Settings: pick the profile you are editing, rename it, and choose
+its voices and personas below. One profile is marked as the default and is
+used whenever a hook names no profile, or names one that does not exist.
+
+A hook picks a profile with `?profile=<name>` on the hook URL. Per project,
+per agent and per machine are all just different URLs. For one project, put
+the same hook in that project's `.claude/settings.json` with the profile
+name on the end:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- 'http://127.0.0.1:8765/hook?profile=scottish'",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Names are matched ignoring case. A name with spaces goes in the URL
+percent-encoded, and the settings window shows the exact string to paste
+under each profile.
+
+## Remote mode
+
+Claude Code on another machine can send its replies here to be spoken, each
+with its own profile, so you hear which Claude is asking. Tick "Listen on
+the network" in Settings > Behaviour and relaunch blether. macOS may ask
+once whether blether may accept incoming connections. On the other machine
+install the same curl hook, pointed at this Mac and naming a profile:
+
+```
+curl -s -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- 'http://<your-mac>.local:8765/hook?profile=pi'
+```
+
+There is no token to set up. Anyone on the network can post to it, which is
+the trade for a tool that stays this simple; see the note at the top. The
+claude-speaks `remote-hook.py` and its Hermes plugin keep working unchanged,
+because the token they send is ignored.
+
 ## Stop talking
 
 Pick "Stop talking" from the menubar, or record a global shortcut under
@@ -152,7 +211,7 @@ is playing when you turn it off stops at once.
 
 Two smaller switches live in the Behaviour section of Settings: "Preamble"
 drops the in-character line, and "Reply" drops the reply itself so you hear
-only the preamble.
+only the preamble. The fourth, "Listen on the network", is remote mode.
 
 ## Logs
 
@@ -163,9 +222,10 @@ and anything that failed. When the file passes 5 MB at launch it is renamed
 
 ## How it works
 
-The app listens on `127.0.0.1:8765`. The hook is a one-line curl that posts
-the Stop payload to `/hook`. The app pulls out the reply and strips the
-markdown. The LLM writes a one-line preamble in Marvin's voice and, for
+The app listens on `127.0.0.1:8765`, or on every interface when "Listen on
+the network" is on. The hook is a one-line curl that posts the Stop payload
+to `/hook`, with `?profile=` naming which profile speaks. The app pulls out
+the reply and strips the markdown. The LLM writes a one-line preamble in Marvin's voice and, for
 replies over 60 words, a compressed version of the reply. Each line is
 rendered to audio by Kokoro and added to a queue that plays one clip at a
 time. A reply that arrives while audio is already playing skips the
@@ -179,10 +239,12 @@ says whether the WAV was written. That file is the reference for wiring a
 different local model to the same protocol.
 
 What blether keeps in `UserDefaults` (domain `uk.ohnotnow.blether`):
-`llmBaseURL`, `llmModel`, `llmExtraBody`, `personas`, `roles`, `isEnabled`,
-`speaksPreamble`, `speaksMainReply`, `uvPath`, and the two shortcuts under
-`KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. The
-LLM key is in Keychain only.
+`llmBaseURL`, `llmModel`, `llmExtraBody`, `personas`, `profiles`,
+`defaultProfileID`, `isEnabled`, `speaksPreamble`, `speaksMainReply`,
+`listensOnLAN`, `uvPath`, and the two shortcuts under
+`KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. An
+older `roles` key is read once to seed the Default profile and never written
+again. The LLM key is in Keychain only.
 
 ## Licence
 
