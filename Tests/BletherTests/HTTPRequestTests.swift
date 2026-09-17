@@ -11,6 +11,28 @@ final class HTTPRequestTests: XCTestCase {
         XCTAssertEqual(String(decoding: request.body, as: UTF8.self), "hello world")
     }
 
+    func testQueryIsSplitFromThePathAndPercentDecoded() throws {
+        let request = try XCTUnwrap(HTTPRequest.parse(Data("POST /hook?profile=Serious%20and%20stern&profile=second&x=1 HTTP/1.1\r\n\r\n".utf8)))
+        XCTAssertEqual(request.path, "/hook")
+        XCTAssertEqual(request.query, ["profile": "Serious and stern", "x": "1"], "first value wins")
+    }
+
+    func testNoQueryGivesAnEmptyDictionary() throws {
+        let request = try XCTUnwrap(HTTPRequest.parse(Data(full.utf8)))
+        XCTAssertEqual(request.query, [:])
+        let bare = try XCTUnwrap(HTTPRequest.parse(Data("POST /hook?profile= HTTP/1.1\r\n\r\n".utf8)))
+        XCTAssertEqual(bare.query, ["profile": ""])
+    }
+
+    /// URLComponents is lenient (a space in the target parses), so the one target it refuses on this
+    /// macOS is an absolute URL with an unclosed bracket. That is enough to pin the fallback.
+    func testUnparseableTargetIsKeptWholeAsThePath() {
+        let (path, query) = HTTPRequest.splitTarget("http://[::1")
+        XCTAssertEqual(path, "http://[::1")
+        XCTAssertEqual(query, [:])
+        XCTAssertEqual(HTTPRequest.splitTarget("/ho ok?a=b").path, "/ho ok", "a space is tolerated, not rejected")
+    }
+
     func testRequestSplitAcrossTwoChunks() {
         let bytes = Array(full.utf8)
         var buffer = Data(bytes[..<30])

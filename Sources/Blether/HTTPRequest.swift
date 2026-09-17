@@ -4,7 +4,10 @@ import Foundation
 /// Chunked bodies are not supported and read as empty.
 struct HTTPRequest {
     let method: String
+    /// The request target without its query string.
     let path: String
+    /// Percent-decoded query parameters; the first value wins for a repeated name.
+    let query: [String: String]
     /// Keys are lowercased; use `header(_:)` for lookup.
     let headers: [String: String]
     let body: Data
@@ -26,7 +29,18 @@ struct HTTPRequest {
         guard let (head, bodyStart) = parseHead(data) else { return nil }
         guard let length = head.declaredContentLength, data.count - bodyStart >= length else { return nil }
         let body = data.subdata(in: bodyStart ..< bodyStart + length)
-        return HTTPRequest(method: head.method, path: head.path, headers: head.headers, body: body)
+        return HTTPRequest(method: head.method, path: head.path, query: head.query, headers: head.headers, body: body)
+    }
+
+    /// "/hook?profile=Serious%20and%20stern" gives ("/hook", ["profile": "Serious and stern"]). A target
+    /// URLComponents rejects is kept whole as the path, so the server answers 404 as it always did.
+    static func splitTarget(_ target: String) -> (path: String, query: [String: String]) {
+        guard let components = URLComponents(string: target) else { return (target, [:]) }
+        var query: [String: String] = [:]
+        for item in components.queryItems ?? [] where query[item.name] == nil {
+            query[item.name] = item.value ?? ""
+        }
+        return (components.path, query)
     }
 
     /// The request line and headers, with an empty body, plus the offset where the body starts.
@@ -45,7 +59,8 @@ struct HTTPRequest {
             let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
             headers[name] = value
         }
-        let request = HTTPRequest(method: String(requestLine[0]), path: String(requestLine[1]), headers: headers, body: Data())
+        let (path, query) = splitTarget(String(requestLine[1]))
+        let request = HTTPRequest(method: String(requestLine[0]), path: path, query: query, headers: headers, body: Data())
         return (request, range.upperBound - data.startIndex)
     }
 }

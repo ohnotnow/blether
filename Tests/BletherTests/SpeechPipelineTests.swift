@@ -79,6 +79,23 @@ final class SpeechPipelineTests: XCTestCase {
         XCTAssertEqual(players[1].url, main?.url)
     }
 
+    func testNamedProfileSpeaksInItsOwnVoices() async {
+        let pi = settings.addProfile(name: "pi")
+        settings.updateRoles([.main: RoleSettings(personaID: nil, voiceID: "pi-main"), .monologue: RoleSettings(personaID: "marvin", voiceID: "pi-mono")], in: pi.id)
+
+        await pipeline().speak(long, profile: "Pi")
+
+        XCTAssertEqual(Set(provider.calls.map(\.voice)), ["pi-mono", "pi-main"])
+    }
+
+    func testUnknownProfileFallsBackToTheDefault() async {
+        settings.addProfile(name: "pi")
+
+        await pipeline().speak(long, profile: "nope")
+
+        XCTAssertEqual(Set(provider.calls.map(\.voice)), ["v-mono", "v-main"])
+    }
+
     func testBusyQueueSkipsThePreamble() async {
         let pipeline = pipeline()
         queue.enqueue(makeTestClip())

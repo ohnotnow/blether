@@ -15,6 +15,7 @@ enum HookServerError: Error, CustomStringConvertible {
 }
 
 /// Localhost HTTP listener for the Claude Code hook payload. One transport for local and remote.
+/// Hands the caller the reply text and the `profile` query parameter, if any.
 /// All mutable state is confined to `queue`.
 final class HookServer: @unchecked Sendable {
     static let defaultPort: UInt16 = 8765
@@ -23,24 +24,34 @@ final class HookServer: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "uk.ohnotnow.blether.hook-server")
     private let requestedPort: UInt16
-    private let onText: @Sendable (String) -> Void
+    private let allInterfaces: Bool
+    private let onText: @Sendable (_ text: String, _ profile: String?) -> Void
     private var listener: NWListener?
     private var readyPort: UInt16?
 
     /// The port actually bound, once `start()` has returned. Useful when asking for port 0.
     var boundPort: UInt16? { queue.sync { readyPort } }
 
-    init(port: UInt16 = HookServer.defaultPort, onText: @escaping @Sendable (String) -> Void) {
+    /// `allInterfaces` binds the port on every interface, IPv4 and IPv6, for remote mode (blether-csm6b:
+    /// LAN-only, no authentication). False binds loopback only.
+    init(port: UInt16 = HookServer.defaultPort, allInterfaces: Bool = false, onText: @escaping @Sendable (_ text: String, _ profile: String?) -> Void) {
         requestedPort = port
+        self.allInterfaces = allInterfaces
         self.onText = onText
     }
 
-    /// Binds 127.0.0.1 and waits (at most two seconds) for the listener to be ready.
+    /// Binds and waits (at most two seconds) for the listener to be ready.
     /// Throws if the port is taken or the listener fails to come up.
     func start() throws {
         let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: requestedPort)!)
-        let listener = try NWListener(using: parameters)
+        let port = NWEndpoint.Port(rawValue: requestedPort)!
+        let listener: NWListener
+        if allInterfaces {
+            listener = try NWListener(using: parameters, on: port)
+        } else {
+            parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)
+            listener = try NWListener(using: parameters)
+        }
         let outcome = Mutex<Result<UInt16, HookServerError>?>(nil)
         let settled = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -69,7 +80,7 @@ final class HookServer: @unchecked Sendable {
         switch outcome.withLock({ $0 }) {
         case .success(let port):
             queue.sync { readyPort = port }
-            Log.log("hook listener ready on 127.0.0.1:\(port)")
+            Log.log(allInterfaces ? "hook listener ready on all interfaces, port \(port) (LAN)" : "hook listener ready on 127.0.0.1:\(port)")
         case .failure(let error):
             throw error
         case nil:
@@ -143,6 +154,8 @@ final class HookServer: @unchecked Sendable {
     }
 
     private func handle(_ request: HTTPRequest, on session: Session) {
+        // The old claude-speaks clients still send an Authorization header. Nothing reads it, on purpose:
+        // blether is LAN-only and has no shared secret (blether-csm6b).
         guard request.path == "/hook" else {
             respond(session, status: 404, body: #"{"error":"not found"}"#)
             return
@@ -171,8 +184,10 @@ final class HookServer: @unchecked Sendable {
             Log.log("hook Stop: empty reply, nothing to speak")
             return
         }
-        Log.log("hook Stop: \(Log.preview(text))")
-        onText(text)
+        let profile = request.query["profile"]
+        let label = profile.map { " (profile: \($0))" } ?? ""
+        Log.log("hook Stop\(label): \(Log.preview(text))")
+        onText(text, profile)
     }
 
     private static let reasons: [Int: String] = [

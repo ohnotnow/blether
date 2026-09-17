@@ -27,7 +27,8 @@ final class SpeechPipeline: Sendable {
         let llm: any LLM
     }
 
-    func speak(_ text: String) async {
+    /// `profile` is the name from the hook URL; nil, blank or unknown means the default profile.
+    func speak(_ text: String, profile name: String? = nil) async {
         // Checked on its own before the snapshot: off must cost nothing, and the snapshot builds an LLM client.
         let isEnabled = await MainActor.run { settings.isEnabled }
         guard isEnabled else {
@@ -35,14 +36,18 @@ final class SpeechPipeline: Sendable {
             return
         }
         let snapshot = await MainActor.run {
-            Snapshot(
+            let profile = settings.profile(named: name)
+            if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, profile.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespacesAndNewlines)) != .orderedSame {
+                Log.log("profile \"\(name)\" not found, using \"\(profile.name)\"")
+            }
+            return Snapshot(
                 generation: queue.generation,
                 // Playback rule 4: no preamble when the reply will queue behind audio already playing.
                 preambleSkipReason: !settings.speaksPreamble ? "preamble is off" : queue.isPlaying ? "audio already playing" : nil,
                 speaksMainReply: settings.speaksMainReply,
-                monologuePersona: settings.persona(for: .monologue),
-                mainPersona: settings.persona(for: .main),
-                voices: Dictionary(uniqueKeysWithValues: Role.allCases.map { ($0, settings.voiceID(for: $0)) }),
+                monologuePersona: settings.persona(for: .monologue, in: profile),
+                mainPersona: settings.persona(for: .main, in: profile),
+                voices: Dictionary(uniqueKeysWithValues: Role.allCases.map { ($0, settings.voiceID(for: $0, in: profile)) }),
                 llm: makeLLM(settings)
             )
         }

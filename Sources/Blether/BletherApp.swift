@@ -22,14 +22,14 @@ struct BletherApp: App {
         }
         var server: HookServer?
         if !AppRuntime.isRunningUnitTests {
-            server = HookServer { text in
-                Task { await pipeline.speak(text) }
+            server = HookServer(allInterfaces: settings.listensOnLAN) { text, profile in
+                Task { await pipeline.speak(text, profile: profile) }
             }
             do {
                 try server?.start()
             } catch {
                 Log.log("hook listener failed on port \(HookServer.defaultPort): \(error)")
-                state.listenerError = "Listener failed: port \(HookServer.defaultPort) in use"
+                state.listenerError = "Listener failed: \(error)"
             }
             KeyboardShortcuts.onKeyUp(for: .stopTalking) {
                 queue.stop()

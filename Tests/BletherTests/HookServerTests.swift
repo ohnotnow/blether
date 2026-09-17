@@ -3,11 +3,13 @@ import Synchronization
 import XCTest
 @testable import Blether
 
-/// Thread-safe list of texts the server handed to its callback.
+/// Thread-safe list of (text, profile) pairs the server handed to its callback.
 private final class Received: Sendable {
-    private let texts = Mutex<[String]>([])
-    func append(_ text: String) { texts.withLock { $0.append(text) } }
-    var all: [String] { texts.withLock { $0 } }
+    struct Call: Equatable { let text: String; let profile: String? }
+    private let calls = Mutex<[Call]>([])
+    func append(_ text: String, _ profile: String?) { calls.withLock { $0.append(Call(text: text, profile: profile)) } }
+    var all: [String] { calls.withLock { $0.map(\.text) } }
+    var pairs: [Call] { calls.withLock { $0 } }
 }
 
 final class HookServerTests: XCTestCase {
@@ -16,8 +18,8 @@ final class HookServerTests: XCTestCase {
 
     override func setUpWithError() throws {
         let received = received
-        server = HookServer(port: 0) { text in
-            received.append(text)
+        server = HookServer(port: 0) { text, profile in
+            received.append(text, profile)
         }
         try server.start()
         XCTAssertNotNil(server.boundPort)
@@ -44,6 +46,37 @@ final class HookServerTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(50))
         }
         XCTAssertEqual(received.all, ["Hello there"])
+    }
+
+    private func waitForCallback() async throws {
+        for _ in 0 ..< 40 where received.all.isEmpty {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    func testProfileQueryParameterIsForwarded() async throws {
+        let (status, _) = try await send("POST", "/hook?profile=Serious%20and%20stern", body: #"{"hook_event_name":"Stop","last_assistant_message":"hi"}"#)
+        XCTAssertEqual(status, 200)
+        try await waitForCallback()
+        XCTAssertEqual(received.pairs, [.init(text: "hi", profile: "Serious and stern")])
+    }
+
+    func testNoProfileParameterForwardsNil() async throws {
+        _ = try await send("POST", "/hook", body: #"{"hook_event_name":"Stop","last_assistant_message":"hi"}"#)
+        try await waitForCallback()
+        XCTAssertEqual(received.pairs, [.init(text: "hi", profile: nil)])
+    }
+
+    /// The claude-speaks remote hook and Hermes plugin still send a Bearer token; it must not get in the way.
+    func testAuthorizationHeaderIsIgnored() async throws {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(server.boundPort!)/hook")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer whatever", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data(#"{"hook_event_name":"Stop","last_assistant_message":"hi"}"#.utf8)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as! HTTPURLResponse).statusCode, 200)
+        try await waitForCallback()
+        XCTAssertEqual(received.all, ["hi"])
     }
 
     func testNonStopEventIsAcknowledgedNotSpoken() async throws {
@@ -104,8 +137,26 @@ final class HookServerTests: XCTestCase {
         XCTAssertEqual(status, 405)
     }
 
+    func testAllInterfacesStillAnswersOnLoopback() async throws {
+        let received = Received()
+        let wide = HookServer(port: 0, allInterfaces: true) { text, profile in received.append(text, profile) }
+        try wide.start()
+        defer { wide.stop() }
+        let port = try XCTUnwrap(wide.boundPort)
+        XCTAssertNotEqual(port, 0)
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/hook?profile=pi")!)
+        request.httpMethod = "POST"
+        request.httpBody = Data(#"{"hook_event_name":"Stop","last_assistant_message":"hi"}"#.utf8)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as! HTTPURLResponse).statusCode, 200)
+        for _ in 0 ..< 40 where received.all.isEmpty {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(received.pairs, [.init(text: "hi", profile: "pi")])
+    }
+
     func testPortInUseThrows() throws {
-        let second = HookServer(port: server.boundPort!) { _ in }
+        let second = HookServer(port: server.boundPort!) { _, _ in }
         XCTAssertThrowsError(try second.start())
     }
 }

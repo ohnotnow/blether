@@ -10,11 +10,15 @@ final class AppSettings {
         static let llmModel = "llmModel"
         static let llmExtraBody = "llmExtraBody"
         static let personas = "personas"
+        /// Pre-profile installs stored one set of roles here. Read once to seed the Default profile, never written again.
         static let roles = "roles"
+        static let profiles = "profiles"
+        static let defaultProfileID = "defaultProfileID"
         static let isEnabled = "isEnabled"
         static let speaksPreamble = "speaksPreamble"
         static let speaksMainReply = "speaksMainReply"
         static let uvPath = "uvPath"
+        static let listensOnLAN = "listensOnLAN"
     }
     private static let llmKeyAccount = "llm"
 
@@ -53,20 +57,69 @@ final class AppSettings {
         set { encode(newValue, Key.personas); revision += 1 }
     }
 
-    var roles: [Role: RoleSettings] {
+    /// Never empty. An install from before profiles gets its old roles as a "Default" profile; nothing is
+    /// written until a profile setter runs.
+    var profiles: [Profile] {
+        get { _ = revision; return decode(Key.profiles) ?? [migratedProfile()] }
+        set { encode(newValue, Key.profiles); revision += 1 }
+    }
+
+    /// Falls back to the first profile when nothing is stored or the stored id no longer exists.
+    var defaultProfileID: String {
         get {
             _ = revision
-            if let stored: [String: RoleSettings] = decode(Key.roles) {
-                var result: [Role: RoleSettings] = [:]
-                for (key, value) in stored { if let role = Role(rawValue: key) { result[role] = value } }
-                return result
-            }
-            return Self.defaultRoles()
+            let profiles = profiles
+            if let stored = defaults.string(forKey: Key.defaultProfileID), profiles.contains(where: { $0.id == stored }) { return stored }
+            return profiles[0].id
         }
-        set {
-            encode(Dictionary(uniqueKeysWithValues: newValue.map { ($0.key.rawValue, $0.value) }), Key.roles)
-            revision += 1
-        }
+        set { defaults.set(newValue, forKey: Key.defaultProfileID); revision += 1 }
+    }
+
+    var defaultProfile: Profile {
+        let id = defaultProfileID
+        return profiles.first { $0.id == id } ?? profiles[0]
+    }
+
+    /// Case-insensitive on the trimmed name. Nil, blank or unknown gives the default profile, so a
+    /// hook is never silent for want of a profile; the caller logs the fallback.
+    func profile(named name: String?) -> Profile {
+        let wanted = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !wanted.isEmpty else { return defaultProfile }
+        return profiles.first { $0.name.caseInsensitiveCompare(wanted) == .orderedSame } ?? defaultProfile
+    }
+
+    /// The default profile's roles. A view kept so callers written before profiles keep working.
+    var roles: [Role: RoleSettings] {
+        get { defaultProfile.roles }
+        set { updateRoles(newValue, in: defaultProfileID) }
+    }
+
+    /// Trims the name and copies the default profile's roles under a fresh id.
+    @discardableResult
+    func addProfile(name: String) -> Profile {
+        let profile = Profile(id: UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), roles: defaultProfile.roles)
+        profiles.append(profile)
+        return profile
+    }
+
+    /// Unknown id is a no-op.
+    func renameProfile(id: String, name: String) {
+        guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[index].name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Refuses to delete the last profile. Deleting the default hands default to the first remaining one.
+    func deleteProfile(id: String) {
+        guard profiles.count > 1, profiles.contains(where: { $0.id == id }) else { return }
+        let wasDefault = defaultProfileID == id
+        profiles.removeAll { $0.id == id }
+        if wasDefault { defaultProfileID = profiles[0].id }
+    }
+
+    /// Unknown id is a no-op.
+    func updateRoles(_ roles: [Role: RoleSettings], in profileID: String) {
+        guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
+        profiles[index].roles = roles
     }
 
     /// Master switch. When false a hook payload does nothing: no LLM call, no synthesis, no audio.
@@ -85,6 +138,13 @@ final class AppSettings {
     var speaksMainReply: Bool {
         get { flag(Key.speaksMainReply) }
         set { defaults.set(newValue, forKey: Key.speaksMainReply); revision += 1 }
+    }
+
+    /// Bind the hook listener on every interface so other machines on the LAN can post replies.
+    /// Off by default (loopback only) and read once at launch. Not `flag(_:)`: that defaults to true.
+    var listensOnLAN: Bool {
+        get { _ = revision; return defaults.bool(forKey: Key.listensOnLAN) }
+        set { defaults.set(newValue, forKey: Key.listensOnLAN); revision += 1 }
     }
 
     /// Where `uv` lives, when it is not in one of the usual places. Empty means look for it.
@@ -114,25 +174,29 @@ final class AppSettings {
         personas[index] = persona
     }
 
-    /// Removes the persona; any role that used it keeps its voice and falls back to no persona.
+    /// Removes the persona; any role in any profile that used it keeps its voice and falls back to no persona.
     func deletePersona(id: String) {
         personas.removeAll { $0.id == id }
-        var roles = roles
-        for (role, var settings) in roles where settings.personaID == id {
-            settings.personaID = nil
-            roles[role] = settings
+        var profiles = profiles
+        for p in profiles.indices {
+            for (role, var settings) in profiles[p].roles where settings.personaID == id {
+                settings.personaID = nil
+                profiles[p].roles[role] = settings
+            }
         }
-        self.roles = roles
+        self.profiles = profiles
     }
 
-    func persona(for role: Role) -> Persona? {
-        guard let id = roles[role]?.personaID else { return nil }
+    /// Nil profile means the default one.
+    func persona(for role: Role, in profile: Profile? = nil) -> Persona? {
+        guard let id = (profile ?? defaultProfile).roles[role]?.personaID else { return nil }
         return personas.first { $0.id == id }
     }
 
-    /// Voice ids from the Apple-voices scaffolding (slices 1 to 3) are not Kokoro's; fall back rather than have the helper refuse them.
-    func voiceID(for role: Role) -> String {
-        guard let stored = roles[role]?.voiceID, !stored.hasPrefix("com.apple.") else { return KokoroProvider.defaultVoiceID }
+    /// Nil profile means the default one. Voice ids from the Apple-voices scaffolding (slices 1 to 3)
+    /// are not Kokoro's; fall back rather than have the helper refuse them.
+    func voiceID(for role: Role, in profile: Profile? = nil) -> String {
+        guard let stored = (profile ?? defaultProfile).roles[role]?.voiceID, !stored.hasPrefix("com.apple.") else { return KokoroProvider.defaultVoiceID }
         return stored
     }
 
@@ -155,6 +219,16 @@ final class AppSettings {
     }
 
     var hasLLMKey: Bool { llmAPIKey != nil }
+
+    /// What an install from before profiles becomes: its stored roles, or the defaults, as "Default".
+    private func migratedProfile() -> Profile {
+        var roles = Self.defaultRoles()
+        if let stored: [String: RoleSettings] = decode(Key.roles) {
+            roles = [:]
+            for (key, value) in stored { if let role = Role(rawValue: key) { roles[role] = value } }
+        }
+        return Profile(id: "default", name: "Default", roles: roles)
+    }
 
     private static func defaultRoles() -> [Role: RoleSettings] {
         let voice = KokoroProvider.defaultVoiceID

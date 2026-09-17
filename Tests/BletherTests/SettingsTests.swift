@@ -46,6 +46,12 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(settings.uvPath, "/somewhere/uv")
     }
 
+    @MainActor func testListenOnNetworkDefaultsOffAndRoundTrips() {
+        XCTAssertFalse(settings.listensOnLAN)
+        settings.listensOnLAN = true
+        XCTAssertTrue(settings.listensOnLAN)
+    }
+
     @MainActor func testTogglesDefaultToOn() {
         let settings = settings
         XCTAssertTrue(settings.isEnabled)
@@ -142,5 +148,106 @@ final class SettingsTests: XCTestCase {
         settings.llmAPIKey = nil
         XCTAssertNil(settings.llmAPIKey)
         XCTAssertFalse(settings.hasLLMKey)
+    }
+
+    // MARK: - Profiles
+
+    @MainActor func testFreshDefaultsHaveOneDefaultProfile() {
+        let settings = settings
+        XCTAssertEqual(settings.profiles.count, 1)
+        XCTAssertEqual(settings.profiles[0].name, "Default")
+        XCTAssertEqual(settings.defaultProfileID, "default")
+        XCTAssertEqual(settings.defaultProfile.roles[.monologue]?.personaID, "marvin")
+        XCTAssertEqual(settings.roles, settings.defaultProfile.roles)
+    }
+
+    @MainActor func testStoredRolesFromBeforeProfilesSeedTheDefaultProfileWithoutWriting() {
+        let legacy = [.main: RoleSettings(personaID: "dame", voiceID: "v1"), .monologue: RoleSettings(personaID: nil, voiceID: "v2")] as [Role: RoleSettings]
+        let stored = Dictionary(uniqueKeysWithValues: legacy.map { ($0.key.rawValue, $0.value) })
+        defaults.set(try! JSONEncoder().encode(stored), forKey: "roles")
+
+        let settings = settings
+        XCTAssertEqual(settings.profiles[0].roles, legacy)
+        XCTAssertEqual(settings.roles[.main]?.voiceID, "v1")
+        XCTAssertNil(defaults.data(forKey: "profiles"), "reading migrates in memory only")
+
+        settings.renameProfile(id: "default", name: "Mine")
+        XCTAssertNotNil(defaults.data(forKey: "profiles"), "the first profile write persists")
+        XCTAssertEqual(self.settings.profiles[0].roles, legacy)
+    }
+
+    @MainActor func testProfileRolesEncodeAsAJSONObject() throws {
+        let data = try JSONEncoder().encode(settings.defaultProfile)
+        let json = String(decoding: data, as: UTF8.self)
+        XCTAssertTrue(json.contains(#""main":{"#), json)
+        XCTAssertTrue(json.contains(#""monologue":{"#), json)
+        XCTAssertEqual(try JSONDecoder().decode(Profile.self, from: data), settings.defaultProfile)
+    }
+
+    @MainActor func testProfileLookupByNameIsTrimmedAndCaseInsensitive() {
+        let settings = settings
+        let hermes = settings.addProfile(name: "hermes")
+        XCTAssertEqual(settings.profile(named: "hermes"), hermes)
+        XCTAssertEqual(settings.profile(named: "Hermes"), hermes)
+        XCTAssertEqual(settings.profile(named: " hermes "), hermes)
+        XCTAssertEqual(settings.profile(named: nil), settings.defaultProfile)
+        XCTAssertEqual(settings.profile(named: ""), settings.defaultProfile)
+        XCTAssertEqual(settings.profile(named: "nope"), settings.defaultProfile)
+    }
+
+    @MainActor func testRolesViewOnlyTouchesTheDefaultProfile() {
+        let settings = settings
+        let pi = settings.addProfile(name: "pi")
+        settings.roles = [.main: RoleSettings(personaID: nil, voiceID: "changed"), .monologue: RoleSettings(personaID: "marvin", voiceID: "changed")]
+        XCTAssertEqual(settings.defaultProfile.roles[.main]?.voiceID, "changed")
+        XCTAssertEqual(settings.profiles.first { $0.id == pi.id }?.roles, pi.roles)
+
+        settings.updateRoles([.main: RoleSettings(personaID: nil, voiceID: "pi-voice")], in: pi.id)
+        XCTAssertEqual(settings.profiles.first { $0.id == pi.id }?.roles[.main]?.voiceID, "pi-voice")
+        XCTAssertEqual(settings.roles[.main]?.voiceID, "changed")
+        XCTAssertEqual(settings.voiceID(for: .main, in: settings.profile(named: "pi")), "pi-voice")
+        XCTAssertEqual(settings.voiceID(for: .main), "changed")
+    }
+
+    @MainActor func testAddProfileTrimsAndCopiesTheDefaultRoles() {
+        let settings = settings
+        let pi = settings.addProfile(name: "  pi ")
+        XCTAssertEqual(pi.name, "pi")
+        XCTAssertEqual(pi.roles, settings.defaultProfile.roles)
+        XCTAssertNotEqual(pi.id, "default")
+        XCTAssertEqual(settings.profiles.count, 2)
+        XCTAssertEqual(settings.defaultProfileID, "default", "adding does not move the default")
+    }
+
+    @MainActor func testDeletingTheDefaultHandsDefaultToTheFirstRemaining() {
+        let settings = settings
+        let pi = settings.addProfile(name: "pi")
+        settings.addProfile(name: "hermes")
+        settings.deleteProfile(id: "default")
+        XCTAssertEqual(settings.profiles.map(\.name), ["pi", "hermes"])
+        XCTAssertEqual(settings.defaultProfileID, pi.id)
+
+        settings.deleteProfile(id: pi.id)
+        XCTAssertEqual(settings.profiles.map(\.name), ["hermes"])
+        settings.deleteProfile(id: settings.profiles[0].id)
+        XCTAssertEqual(settings.profiles.count, 1, "the last profile cannot be deleted")
+        settings.deleteProfile(id: "ghost")
+        XCTAssertEqual(settings.profiles.count, 1)
+    }
+
+    @MainActor func testStaleDefaultProfileIDFallsBackToTheFirstProfile() {
+        let settings = settings
+        defaults.set("gone", forKey: "defaultProfileID")
+        XCTAssertEqual(settings.defaultProfileID, "default")
+    }
+
+    @MainActor func testDeletePersonaClearsItFromEveryProfile() {
+        let settings = settings
+        let pi = settings.addProfile(name: "pi")
+        settings.updateRoles([.main: RoleSettings(personaID: "marvin", voiceID: "v")], in: pi.id)
+        settings.deletePersona(id: "marvin")
+        XCTAssertNil(settings.profile(named: "pi").roles[.main]?.personaID)
+        XCTAssertEqual(settings.profile(named: "pi").roles[.main]?.voiceID, "v")
+        XCTAssertNil(settings.roles[.monologue]?.personaID)
     }
 }
