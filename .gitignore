@@ -1,2 +1,6 @@
 /.ait
 /.ant
+build/
+.DS_Store
+xcuserdata/
+/.claude/settings.local.json

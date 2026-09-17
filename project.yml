@@ -1,0 +1,58 @@
+name: Blether
+options:
+  bundleIdPrefix: uk.ohnotnow
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 1.10.0
+targets:
+  Blether:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/Blether
+    dependencies:
+      - package: KeyboardShortcuts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: uk.ohnotnow.blether
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: YES
+    info:
+      path: Sources/Blether/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleDisplayName: blether
+        NSHumanReadableCopyright: ""
+  BletherTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/BletherTests
+    dependencies:
+      - target: Blether
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: uk.ohnotnow.blether.tests
+schemes:
+  Blether:
+    build:
+      targets:
+        Blether: all
+        BletherTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - BletherTests
