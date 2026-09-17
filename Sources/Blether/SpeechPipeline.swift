@@ -18,7 +18,9 @@ final class SpeechPipeline: Sendable {
     /// Everything read from main-actor state, in one hop, at the moment the reply arrives.
     private struct Snapshot: Sendable {
         let generation: Int
-        let includePreamble: Bool
+        /// nil when the preamble is wanted; otherwise why it is not, for the log.
+        let preambleSkipReason: String?
+        let speaksMainReply: Bool
         let monologuePersona: Persona?
         let mainPersona: Persona?
         let voices: [Role: String]
@@ -26,21 +28,34 @@ final class SpeechPipeline: Sendable {
     }
 
     func speak(_ text: String) async {
+        // Checked on its own before the snapshot: off must cost nothing, and the snapshot builds an LLM client.
+        let isEnabled = await MainActor.run { settings.isEnabled }
+        guard isEnabled else {
+            Log.log("speaking is off, reply dropped")
+            return
+        }
         let snapshot = await MainActor.run {
             Snapshot(
                 generation: queue.generation,
                 // Playback rule 4: no preamble when the reply will queue behind audio already playing.
-                includePreamble: !queue.isPlaying,
+                preambleSkipReason: !settings.speaksPreamble ? "preamble is off" : queue.isPlaying ? "audio already playing" : nil,
+                speaksMainReply: settings.speaksMainReply,
                 monologuePersona: settings.persona(for: .monologue),
                 mainPersona: settings.persona(for: .main),
                 voices: Dictionary(uniqueKeysWithValues: Role.allCases.map { ($0, settings.voiceID(for: $0)) }),
                 llm: makeLLM(settings)
             )
         }
-        if !snapshot.includePreamble { Log.log("audio already playing, skipping the preamble") }
+        let includePreamble = snapshot.preambleSkipReason == nil
+        if let reason = snapshot.preambleSkipReason { Log.log("\(reason), skipping the preamble") }
+        guard includePreamble || snapshot.speaksMainReply else {
+            Log.log("reply is off and the preamble is skipped, nothing to speak")
+            return
+        }
 
         let clips = await ReplyPlanner(llm: snapshot.llm).plan(
-            text, monologuePersona: snapshot.monologuePersona, mainPersona: snapshot.mainPersona, includePreamble: snapshot.includePreamble
+            text, monologuePersona: snapshot.monologuePersona, mainPersona: snapshot.mainPersona,
+            includePreamble: includePreamble, includeMain: snapshot.speaksMainReply
         )
 
         // Synthesise concurrently, but hand clips to the queue in planned order as each becomes ready.

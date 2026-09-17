@@ -7,8 +7,22 @@ final class ReplyPlannerTests: XCTestCase {
     private let short = "Done. Two files changed and the tests pass."
     private let long = Array(repeating: "word", count: 70).joined(separator: " ")
 
-    private func plan(_ text: String, monologue: Persona? = .marvin, main: Persona? = nil, preamble: Bool = true) async -> [PlannedClip] {
-        await planner.plan(text, monologuePersona: monologue, mainPersona: main, includePreamble: preamble)
+    private func plan(_ text: String, monologue: Persona? = .marvin, main: Persona? = nil, preamble: Bool = true, mainReply: Bool = true) async -> [PlannedClip] {
+        await planner.plan(text, monologuePersona: monologue, mainPersona: main, includePreamble: preamble, includeMain: mainReply)
+    }
+
+    func testMainOffReturnsOnlyThePreambleAndNeverSummarises() async {
+        let clips = await plan(long, mainReply: false)
+        XCTAssertEqual(clips.map(\.role), [.monologue])
+        XCTAssertEqual(clips[0].text, "Oh joy, another reply ...")
+        XCTAssertEqual(llm.summaryCalls, 0)
+    }
+
+    func testMainOffWithFailingPreambleReturnsNothing() async {
+        llm.preambleScript = { _ in throw URLError(.cannotConnectToHost) }
+        let clips = await plan(long, mainReply: false)
+        XCTAssertEqual(clips, [])
+        XCTAssertEqual(llm.summaryCalls, 0)
     }
 
     func testShortReplyGetsPreambleAndRawText() async {

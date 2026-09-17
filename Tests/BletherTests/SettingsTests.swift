@@ -33,6 +33,60 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(settings.voiceID(for: .main), voice)
     }
 
+    @MainActor func testTogglesDefaultToOn() {
+        let settings = settings
+        XCTAssertTrue(settings.isEnabled)
+        XCTAssertTrue(settings.speaksPreamble)
+        XCTAssertTrue(settings.speaksMainReply)
+    }
+
+    @MainActor func testTogglesRoundTripThroughASecondInstance() {
+        let first = settings
+        first.isEnabled = false
+        first.speaksPreamble = false
+        first.speaksMainReply = false
+        XCTAssertFalse(first.isEnabled)
+
+        let second = settings
+        XCTAssertFalse(second.isEnabled)
+        XCTAssertFalse(second.speaksPreamble)
+        XCTAssertFalse(second.speaksMainReply)
+
+        second.isEnabled = true
+        XCTAssertTrue(settings.isEnabled)
+        XCTAssertFalse(settings.speaksPreamble)
+    }
+
+    @MainActor func testAddPersonaTrimsAndAppendsWithoutAssigning() {
+        let settings = settings
+        settings.addPersona(name: "  Dame \n", description: " a wildly excited pantomime dame ")
+        XCTAssertEqual(settings.personas.count, 2)
+        let dame = settings.personas[1]
+        XCTAssertEqual(dame.name, "Dame")
+        XCTAssertEqual(dame.description, "a wildly excited pantomime dame")
+        XCTAssertNotEqual(dame.id, "marvin")
+        XCTAssertEqual(settings.roles[.monologue]?.personaID, "marvin")
+        XCTAssertEqual(self.settings.personas.count, 2, "a second instance sees it")
+    }
+
+    @MainActor func testUpdatePersonaReplacesByIdAndIgnoresUnknown() {
+        let settings = settings
+        settings.updatePersona(Persona(id: "marvin", name: "Marv", description: "cheerier"))
+        XCTAssertEqual(settings.personas.map(\.name), ["Marv"])
+        settings.updatePersona(Persona(id: "ghost", name: "Ghost", description: "x"))
+        XCTAssertEqual(settings.personas.count, 1)
+    }
+
+    @MainActor func testDeletePersonaClearsRolesPointingAtItButKeepsTheirVoice() {
+        let settings = settings
+        let voice = settings.roles[.monologue]!.voiceID
+        settings.deletePersona(id: "marvin")
+        XCTAssertEqual(settings.personas, [])
+        XCTAssertNil(settings.roles[.monologue]?.personaID)
+        XCTAssertEqual(settings.roles[.monologue]?.voiceID, voice)
+        XCTAssertNil(self.settings.persona(for: .monologue))
+    }
+
     @MainActor func testValuesRoundTripThroughASecondInstance() {
         let settings = settings
         let dame = Persona(id: "dame", name: "Dame", description: "a wildly excited pantomime dame")

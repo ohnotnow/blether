@@ -5,7 +5,7 @@ import SwiftUI
 struct BletherApp: App {
     @Environment(\.openSettings) private var openSettings
     @State private var appState: AppState
-    private let settings: AppSettings
+    @State private var settings: AppSettings
     private let queue: PlaybackQueue
     private let pipeline: SpeechPipeline
     private let hookServer: HookServer?
@@ -31,20 +31,29 @@ struct BletherApp: App {
             KeyboardShortcuts.onKeyUp(for: .stopTalking) {
                 queue.stop()
             }
+            KeyboardShortcuts.onKeyUp(for: .toggleSpeaking) {
+                setSpeaking(!settings.isEnabled, settings: settings, queue: queue)
+            }
         }
-        self.settings = settings
+        _settings = State(initialValue: settings)
         self.queue = queue
         self.pipeline = pipeline
         hookServer = server
         _appState = State(initialValue: state)
     }
 
+    /// A plain `$settings.isEnabled` cannot carry the stop side effect, hence the hand-built binding.
+    private var speaking: Binding<Bool> {
+        Binding(get: { settings.isEnabled }, set: { setSpeaking($0, settings: settings, queue: queue) })
+    }
+
     var body: some Scene {
-        MenuBarExtra("blether", systemImage: "bubble.left.and.bubble.right", isInserted: .constant(!AppRuntime.isRunningUnitTests)) {
+        MenuBarExtra("blether", systemImage: MenuBarIcon.name(enabled: settings.isEnabled), isInserted: .constant(!AppRuntime.isRunningUnitTests)) {
             if let error = appState.listenerError {
                 Button(error) {}.disabled(true)
                 Divider()
             }
+            Toggle("Speaking", isOn: speaking)
             Button("Stop talking") {
                 queue.stop()
             }
@@ -60,11 +69,7 @@ struct BletherApp: App {
             .keyboardShortcut("q")
         }
         Settings {
-            Form {
-                KeyboardShortcuts.Recorder("Stop talking:", name: .stopTalking)
-            }
-            .padding()
-            .frame(width: 360)
+            SettingsView(settings: settings, speaking: speaking)
         }
     }
 }

@@ -15,16 +15,18 @@ struct ReplyPlanner: Sendable {
 
     let llm: any LLM
 
-    /// `text` is already markdown-stripped and non-empty.
-    func plan(_ text: String, monologuePersona: Persona?, mainPersona: Persona?, includePreamble: Bool) async -> [PlannedClip] {
+    /// `text` is already markdown-stripped and non-empty. With `includeMain` false the summariser is
+    /// never called and only the preamble (if any) comes back; a preamble failure is then log only.
+    func plan(_ text: String, monologuePersona: Persona?, mainPersona: Persona?, includePreamble: Bool, includeMain: Bool) async -> [PlannedClip] {
         async let preambleResult = preamble(for: text, persona: includePreamble ? monologuePersona : nil)
-        async let summaryResult = summary(of: text, persona: mainPersona)
-        let (preamble, summary) = await (preambleResult, summaryResult)
+        let summary: Result<String, RoleFailure>? = includeMain ? await self.summary(of: text, persona: mainPersona) : nil
+        let preamble = await preambleResult
 
         var clips: [PlannedClip] = []
         if case .success(let line?) = preamble {
             clips.append(PlannedClip(text: SpeechText.cap(line + " ...", limit: Self.preambleCap), role: .monologue))
         }
+        guard let summary else { return clips }
 
         var main = (try? summary.get()) ?? text
         let failed = [preamble.failedName, summary.failedName].compactMap { $0 }

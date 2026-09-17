@@ -92,6 +92,38 @@ final class SpeechPipelineTests: XCTestCase {
         XCTAssertEqual(players[1].url, provider.calls[0].url)
     }
 
+    func testSpeakingOffDropsTheReplyWithoutSpendingAnything() async {
+        settings.isEnabled = false
+        await pipeline().speak(long)
+        XCTAssertTrue(llm.calls.isEmpty)
+        XCTAssertTrue(provider.calls.isEmpty)
+        XCTAssertTrue(players.isEmpty)
+        XCTAssertEqual(makeLLMCalls, 0, "the snapshot must not be built for a dropped reply")
+    }
+
+    func testPreambleOffPlaysOnlyTheReply() async {
+        settings.speaksPreamble = false
+        await pipeline().speak(long)
+        XCTAssertEqual(llm.preambleCalls, 0)
+        XCTAssertEqual(provider.calls.map(\.voice), ["v-main"])
+    }
+
+    func testMainReplyOffPlaysOnlyThePreamble() async {
+        settings.speaksMainReply = false
+        await pipeline().speak(long)
+        XCTAssertEqual(llm.summaryCalls, 0)
+        XCTAssertEqual(provider.calls.map(\.voice), ["v-mono"])
+        XCTAssertEqual(players.count, 1)
+    }
+
+    func testBothOffSpeaksNothingAndCallsNoLLM() async {
+        settings.speaksPreamble = false
+        settings.speaksMainReply = false
+        await pipeline().speak(long)
+        XCTAssertTrue(llm.calls.isEmpty)
+        XCTAssertTrue(provider.calls.isEmpty)
+    }
+
     func testPreambleSynthesisFailureStillPlaysTheReply() async {
         provider.failOnTextContaining = "Oh joy"
         await pipeline().speak(long)

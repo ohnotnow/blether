@@ -57,9 +57,9 @@ struct ChatCompletionsClient: LLM {
             messages: [.init(role: "system", content: system), .init(role: "user", content: user)]
         ))
         guard var merged = try JSONSerialization.jsonObject(with: base) as? [String: Any] else { return base }
-        if let extra = try? JSONSerialization.jsonObject(with: Data(extraBody.utf8)) as? [String: Any] {
+        if let extra = ExtraBody.parse(extraBody) {
             for (key, value) in extra where key != "model" && key != "messages" { merged[key] = value }
-        } else if extraBody.trimmingCharacters(in: .whitespacesAndNewlines) != "{}" {
+        } else {
             Log.log("llm extra body ignored: not a JSON object")
         }
         return try JSONSerialization.data(withJSONObject: merged)

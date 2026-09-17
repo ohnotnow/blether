@@ -11,6 +11,9 @@ final class AppSettings {
         static let llmExtraBody = "llmExtraBody"
         static let personas = "personas"
         static let roles = "roles"
+        static let isEnabled = "isEnabled"
+        static let speaksPreamble = "speaksPreamble"
+        static let speaksMainReply = "speaksMainReply"
     }
     private static let llmKeyAccount = "llm"
 
@@ -63,6 +66,56 @@ final class AppSettings {
             encode(Dictionary(uniqueKeysWithValues: newValue.map { ($0.key.rawValue, $0.value) }), Key.roles)
             revision += 1
         }
+    }
+
+    /// Master switch. When false a hook payload does nothing: no LLM call, no synthesis, no audio.
+    var isEnabled: Bool {
+        get { flag(Key.isEnabled) }
+        set { defaults.set(newValue, forKey: Key.isEnabled); revision += 1 }
+    }
+
+    /// Speak the in-character preamble before the reply.
+    var speaksPreamble: Bool {
+        get { flag(Key.speaksPreamble) }
+        set { defaults.set(newValue, forKey: Key.speaksPreamble); revision += 1 }
+    }
+
+    /// Speak the reply itself (or its compressed form). Off means only the preamble is heard.
+    var speaksMainReply: Bool {
+        get { flag(Key.speaksMainReply) }
+        set { defaults.set(newValue, forKey: Key.speaksMainReply); revision += 1 }
+    }
+
+    /// A Bool that defaults to true when unset; `bool(forKey:)` alone would default to false.
+    private func flag(_ key: String) -> Bool {
+        _ = revision
+        return defaults.object(forKey: key) == nil ? true : defaults.bool(forKey: key)
+    }
+
+    /// Trims both strings and appends under a fresh id. Nothing is assigned to a role.
+    func addPersona(name: String, description: String) {
+        personas.append(Persona(
+            id: UUID().uuidString,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines)
+        ))
+    }
+
+    /// Replaces the persona with the same id. An unknown id is a no-op.
+    func updatePersona(_ persona: Persona) {
+        guard let index = personas.firstIndex(where: { $0.id == persona.id }) else { return }
+        personas[index] = persona
+    }
+
+    /// Removes the persona; any role that used it keeps its voice and falls back to no persona.
+    func deletePersona(id: String) {
+        personas.removeAll { $0.id == id }
+        var roles = roles
+        for (role, var settings) in roles where settings.personaID == id {
+            settings.personaID = nil
+            roles[role] = settings
+        }
+        self.roles = roles
     }
 
     func persona(for role: Role) -> Persona? {

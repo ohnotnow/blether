@@ -14,10 +14,12 @@ for a long chatty back-and-forth.
 
 ## Status
 
-Slice 2. Apple system voices, one LLM that writes a short Marvin preamble and
-compresses long replies for listening, no settings window yet, no listening.
-A Claude Code Stop hook posts the reply to the app and you hear it, replies
-queue rather than talk over each other, and a hotkey stops everything. More
+Slice 3. Apple system voices, one LLM that writes a short Marvin preamble and
+compresses long replies for listening, and a settings window for the lot: the
+LLM endpoint, model and key, your personas, a voice and persona per role, and
+switches for speaking, the preamble and the reply. No listening yet. A Claude
+Code Stop hook posts the reply to the app and you hear it, replies queue
+rather than talk over each other, and a hotkey stops everything. More
 providers (ElevenLabs, OpenAI, xAI, Mistral, Kokoro on MLX) and the rest are
 on the way.
 
@@ -29,28 +31,23 @@ this Mac at `http://127.0.0.1:11434/v1` with the model `maternion/minicpm5:2b`,
 so nothing is spent and no key is needed. If Ollama is not running you still
 hear the reply, prefixed with a heads-up that the LLM fell over.
 
-Until the settings window arrives you can point it elsewhere from the shell:
+To point it elsewhere, open "Settings..." from the menubar and change the
+base URL and model in the LLM section. If the endpoint needs an API key,
+paste it there too: it goes into your macOS Keychain and is sent only to that
+endpoint. Changes take effect on the next reply.
 
-```sh
-defaults write uk.ohnotnow.blether llmBaseURL https://api.openai.com/v1
-defaults write uk.ohnotnow.blether llmModel gpt-5.6-luna
-```
+Some endpoints take fields that are not standard OpenAI. The Advanced fold at
+the bottom of the settings window holds an extra request body, a JSON object
+merged into every request (it cannot replace the model or the messages).
+With Ollama and a reasoning model this one is worth having, otherwise a
+40-word summary can take a minute of hidden thinking:
 
-Some endpoints take fields that are not standard OpenAI. Anything you put in
-`llmExtraBody` is merged into every request (it cannot replace the model or
-the messages). With Ollama and a reasoning model this one is worth having,
-otherwise a 40-word summary can take a minute of hidden thinking:
-
-```sh
-defaults write uk.ohnotnow.blether llmExtraBody -string '{"reasoning_effort": "none"}'
+```json
+{"reasoning_effort": "none"}
 ```
 
 (`"low"` and Ollama's own `"think": false` were tried and did not stop the
 thinking on the compatible endpoint; `"none"` did.)
-
-An API key, if the endpoint needs one, lives in your Keychain: add a generic
-password in Keychain Access with the service `uk.ohnotnow.blether` and the
-account `llm`. Changes take effect on the next reply.
 
 ## Build
 
@@ -69,8 +66,8 @@ make run    # builds and launches it
 make test   # runs the unit tests
 ```
 
-A speech-bubble icon appears in the menubar. There is no Dock icon and no
-main window.
+A speaker icon appears in the menubar. There is no Dock icon and no main
+window.
 
 ## Install the hook
 
@@ -109,12 +106,33 @@ answers the request as soon as the payload decodes, before any speech work,
 so the hook is quick either way, but async keeps it from ever getting in
 your way.
 
+## Voices and personas
+
+A persona is a name and a one-line character description that slots into
+"in the voice of...". Marvin ships as the default and you can add your own in
+the Voices and personas section of the settings window. Each role, the
+preamble and the reply, gets a persona (or none) and one of the Apple voices
+installed on your Mac, grouped by language.
+
 ## Stop talking
 
 Pick "Stop talking" from the menubar, or record a global shortcut under
 "Settings..." in the same menu. Stop kills the clip that is playing and
 drops everything queued behind it. The shortcut is remembered between
 launches.
+
+## Turning it off
+
+When you are deep in a terminal discussion, hearing three seconds of every
+reply and then stopping it is worse than silence. Untick "Speaking" in the
+menubar, or record a "Toggle speaking" shortcut in Settings. Off means a
+reply is dropped before any LLM call or speech work, so nothing is spent,
+and the menubar speaker gains a slash so the silence is explained. Whatever
+is playing when you turn it off stops at once.
+
+Two smaller switches live in the Behaviour section of Settings: "Preamble"
+drops the in-character line, and "Reply" drops the reply itself so you hear
+only the preamble.
 
 ## How it works
 
@@ -128,8 +146,10 @@ the preamble. Everything happens inside the app, so there is nothing else
 to install and nothing to keep running.
 
 What blether keeps in `UserDefaults` (domain `uk.ohnotnow.blether`):
-`llmBaseURL`, `llmModel`, `llmExtraBody`, `personas`, `roles`, and the stop shortcut under
-`KeyboardShortcuts_stopTalking`. The LLM key is in Keychain only.
+`llmBaseURL`, `llmModel`, `llmExtraBody`, `personas`, `roles`, `isEnabled`,
+`speaksPreamble`, `speaksMainReply`, and the two shortcuts under
+`KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. The
+LLM key is in Keychain only.
 
 ## Licence
 

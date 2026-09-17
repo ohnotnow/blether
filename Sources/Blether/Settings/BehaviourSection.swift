@@ -1,0 +1,30 @@
+import KeyboardShortcuts
+import SwiftUI
+
+/// The three toggles that exist today and the two global hotkeys. Each toggle says what off does,
+/// as visible text rather than hover help, so it can be read at any text size.
+struct BehaviourSection: View {
+    @Bindable var settings: AppSettings
+    let speaking: Binding<Bool>
+
+    var body: some View {
+        Section("Behaviour") {
+            toggle("Speaking", "Off drops every reply before any LLM or speech work.", isOn: speaking)
+            toggle("Preamble", "Off skips the in-character line before the reply.", isOn: $settings.speaksPreamble)
+            toggle("Reply", "Off plays only the preamble.", isOn: $settings.speaksMainReply)
+            KeyboardShortcuts.Recorder("Toggle speaking:", name: .toggleSpeaking)
+            KeyboardShortcuts.Recorder("Stop talking:", name: .stopTalking)
+        }
+    }
+
+    private func toggle(_ title: String, _ detail: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading) {
+                Text(title)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
