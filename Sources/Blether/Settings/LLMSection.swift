@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Endpoint, model and the API key. The key rows follow Naiku's settings pattern: a green
-/// "saved" line with Replace and Remove once a key exists, otherwise a paste field and Save.
+/// Endpoint, model and the API key. The key rows: a green "saved" line with Replace and Remove
+/// once a key exists, otherwise a paste field and Save.
 struct LLMSection: View {
     @Bindable var settings: AppSettings
     @State private var keyDraft = ""

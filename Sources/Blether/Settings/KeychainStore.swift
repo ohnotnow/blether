@@ -7,7 +7,6 @@ enum KeychainError: Error, Equatable {
 }
 
 /// Generic-password items, one per account, never synced to iCloud.
-/// Shape lifted from Naiku's KeychainAPIKeyStore.
 struct KeychainStore: Sendable {
     let service: String
 

@@ -19,8 +19,8 @@ enum Prompts {
     Input: Done. Three changes: bootstrap/app.php:18, trustProxies(at: '') as string, not array. This is the actual root cause. Removed both band-aids and the now-unused URL import. Once this deploys, isSecure() will correctly return true in production.
     Output: Done, three changes. trustProxies now takes a string, not an array. That was the actual root cause. Removed both band-aids and the unused import. Once deployed, isSecure will return true in production.
 
-    Input: Right, fingers crossed, Mimo's moment of truth. The thing I keep coming back to about this project is how much character it packs into roughly 480 lines of Python.
-    Output: Fingers crossed for Mimo. What I love is how much character this packs into 480 lines.
+    Input: Right, fingers crossed, Ferret's moment of truth. The thing I keep coming back to about this project is how much character it packs into roughly 480 lines of Python.
+    Output: Fingers crossed for Ferret. What I love is how much character this packs into 480 lines.
 
     Return only the rewritten text, nothing else.
     """
