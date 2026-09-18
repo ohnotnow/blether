@@ -57,6 +57,55 @@ final class SettingsTests: XCTestCase {
         XCTAssertTrue(settings.isEnabled)
         XCTAssertTrue(settings.speaksPreamble)
         XCTAssertTrue(settings.speaksMainReply)
+        XCTAssertTrue(settings.speaksNotifications)
+    }
+
+    @MainActor func testNotificationsToggleRoundTrips() {
+        settings.speaksNotifications = false
+        XCTAssertFalse(settings.speaksNotifications)
+    }
+
+    // MARK: - Notifications
+
+    @MainActor func testFreshDefaultsGiveTheNotificationRoleMarvinAndTheDefaultVoice() {
+        let settings = settings
+        XCTAssertEqual(settings.roles[.notification], RoleSettings(personaID: "marvin", voiceID: KokoroProvider.defaultVoiceID))
+        XCTAssertEqual(settings.persona(for: .notification), Persona.marvin)
+        XCTAssertEqual(Role.notification.displayName, "Notification")
+        XCTAssertEqual(Role.allCases.last, .notification, "heard on its own, so listed last")
+    }
+
+    @MainActor func testProfilesStoredWithoutTheNotificationRoleGetItsDefaultsWithoutWriting() throws {
+        let old = Profile(id: "default", name: "Default", roles: [.main: RoleSettings(personaID: nil, voiceID: "v1"), .monologue: RoleSettings(personaID: nil, voiceID: "v2")])
+        let stored = try JSONEncoder().encode([old])
+        defaults.set(stored, forKey: "profiles")
+
+        let settings = settings
+        XCTAssertEqual(settings.roles[.main]?.voiceID, "v1")
+        XCTAssertEqual(settings.roles[.notification], RoleSettings(personaID: "marvin", voiceID: KokoroProvider.defaultVoiceID))
+        XCTAssertEqual(defaults.data(forKey: "profiles"), stored, "filled in on read only")
+
+        settings.renameProfile(id: "default", name: "Mine")
+        XCTAssertNotEqual(defaults.data(forKey: "profiles"), stored)
+        XCTAssertEqual(self.settings.roles[.notification]?.personaID, "marvin")
+    }
+
+    @MainActor func testNotificationLanguagesDefaultToTheSevenAndRoundTrip() {
+        let settings = settings
+        let lines = settings.notificationLanguages.split(whereSeparator: \.isNewline).map(String.init)
+        XCTAssertEqual(lines, ["English 1", "French 5", "Spanish 5", "Italian 5", "Portuguese 5", "Hindi 5", "Chinese (Simplified) 5"])
+        settings.notificationLanguages = "Glaswegian 3\nEnglish"
+        XCTAssertEqual(self.settings.notificationLanguages, "Glaswegian 3\nEnglish")
+    }
+
+    @MainActor func testRememberQuipKeepsTheLastTenOldestFirst() {
+        let settings = settings
+        XCTAssertEqual(settings.recentQuips, [])
+        for n in 1...12 { settings.rememberQuip("line \(n)") }
+        XCTAssertEqual(settings.recentQuips.count, 10)
+        XCTAssertEqual(settings.recentQuips.first, "line 3")
+        XCTAssertEqual(settings.recentQuips.last, "line 12")
+        XCTAssertEqual(self.settings.recentQuips, settings.recentQuips, "a second instance sees the same history")
     }
 
     @MainActor func testTogglesRoundTripThroughASecondInstance() {
@@ -167,13 +216,15 @@ final class SettingsTests: XCTestCase {
         defaults.set(try! JSONEncoder().encode(stored), forKey: "roles")
 
         let settings = settings
-        XCTAssertEqual(settings.profiles[0].roles, legacy)
+        var expected = legacy
+        expected[.notification] = RoleSettings(personaID: "marvin", voiceID: KokoroProvider.defaultVoiceID)
+        XCTAssertEqual(settings.profiles[0].roles, expected, "the pre-profile roles, plus the role that did not exist then")
         XCTAssertEqual(settings.roles[.main]?.voiceID, "v1")
         XCTAssertNil(defaults.data(forKey: "profiles"), "reading migrates in memory only")
 
         settings.renameProfile(id: "default", name: "Mine")
         XCTAssertNotNil(defaults.data(forKey: "profiles"), "the first profile write persists")
-        XCTAssertEqual(self.settings.profiles[0].roles, legacy)
+        XCTAssertEqual(self.settings.profiles[0].roles, expected)
     }
 
     @MainActor func testProfileRolesEncodeAsAJSONObject() throws {

@@ -36,10 +36,7 @@ final class SpeechPipeline: Sendable {
             return
         }
         let snapshot = await MainActor.run {
-            let profile = settings.profile(named: name)
-            if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, profile.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespacesAndNewlines)) != .orderedSame {
-                Log.log("profile \"\(name)\" not found, using \"\(profile.name)\"")
-            }
+            let profile = resolveProfile(named: name)
             return Snapshot(
                 generation: queue.generation,
                 // Playback rule 4: no preamble when the reply will queue behind audio already playing.
@@ -68,7 +65,7 @@ final class SpeechPipeline: Sendable {
             for (index, clip) in clips.enumerated() {
                 let voice = snapshot.voices[clip.role] ?? KokoroProvider.defaultVoiceID
                 group.addTask { [provider] in
-                    do { return (index, .success(try await provider.synthesise(clip.text, voice: voice))) }
+                    do { return (index, .success(try await provider.synthesise(clip.text, voice: voice, language: nil))) }
                     catch { return (index, .failure(error)) }
                 }
             }
@@ -82,6 +79,80 @@ final class SpeechPipeline: Sendable {
                 }
             }
         }
+    }
+
+    /// Everything a quip needs from main-actor state, in one hop.
+    private struct QuipSnapshot: Sendable {
+        let generation: Int
+        let persona: Persona?
+        let voice: String
+        let languages: NotificationLanguages
+        let history: [String]
+        let llm: any LLM
+    }
+
+    /// A Notification hook: one short in-character line, dropped rather than queued when audio is
+    /// already playing (playback rule 2, blether-VYQvH). The queue is checked before any LLM work and
+    /// again when the clip is ready. A failure beeps; the quip itself is the information.
+    func quip(profile name: String? = nil) async {
+        let snapshot: QuipSnapshot? = await MainActor.run {
+            guard settings.isEnabled else {
+                Log.log("speaking is off, notification dropped")
+                return nil
+            }
+            guard settings.speaksNotifications else {
+                Log.log("notifications are off, dropped")
+                return nil
+            }
+            guard !queue.isPlaying else {
+                Log.log("audio already playing, notification dropped")
+                return nil
+            }
+            let profile = resolveProfile(named: name)
+            return QuipSnapshot(
+                generation: queue.generation,
+                persona: settings.persona(for: .notification, in: profile),
+                voice: settings.voiceID(for: .notification, in: profile),
+                languages: NotificationLanguages(parsing: settings.notificationLanguages),
+                history: settings.recentQuips,
+                llm: makeLLM(settings)
+            )
+        }
+        guard let snapshot else { return }
+
+        guard let quip = await QuipPlanner(llm: snapshot.llm).plan(persona: snapshot.persona, languages: snapshot.languages, history: snapshot.history) else {
+            Log.log("notification line failed, beeping")
+            await MainActor.run { NSSound.beep() }
+            return
+        }
+        await MainActor.run { settings.rememberQuip(quip.text) }
+
+        let audio: AudioClip
+        do {
+            audio = try await provider.synthesise(quip.text, voice: snapshot.voice, language: quip.language)
+        } catch {
+            Log.log("synthesis failed (\(provider.name), notification): \(error)")
+            await MainActor.run { NSSound.beep() }
+            return
+        }
+        await MainActor.run {
+            if queue.isPlaying {
+                Log.log("audio started during synthesis, notification dropped")
+                try? FileManager.default.removeItem(at: audio.url)
+            } else {
+                queue.enqueue(audio, generation: snapshot.generation)
+            }
+        }
+    }
+
+    /// The profile a hook named, or the default, with a log line when the name was not found.
+    @MainActor
+    private func resolveProfile(named name: String?) -> Profile {
+        let profile = settings.profile(named: name)
+        if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, profile.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespacesAndNewlines)) != .orderedSame {
+            Log.log("profile \"\(name)\" not found, using \"\(profile.name)\"")
+        }
+        return profile
     }
 
     private func deliver(_ clip: PlannedClip, _ result: Result<AudioClip, Error>, generation: Int) async {

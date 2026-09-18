@@ -14,8 +14,15 @@ enum HookServerError: Error, CustomStringConvertible {
     }
 }
 
+/// What a hook payload asks for. Stop carries the reply, markdown already stripped; Notification
+/// carries nothing (its message and type are ignored on purpose, the hook matcher filters types).
+enum HookEvent: Sendable, Equatable {
+    case stop(text: String)
+    case notification
+}
+
 /// Localhost HTTP listener for the Claude Code hook payload. One transport for local and remote.
-/// Hands the caller the reply text and the `profile` query parameter, if any.
+/// Hands the caller the event and the `profile` query parameter, if any.
 /// All mutable state is confined to `queue`.
 final class HookServer: @unchecked Sendable {
     static let defaultPort: UInt16 = 8765
@@ -25,7 +32,7 @@ final class HookServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "uk.ohnotnow.blether.hook-server")
     private let requestedPort: UInt16
     private let allInterfaces: Bool
-    private let onText: @Sendable (_ text: String, _ profile: String?) -> Void
+    private let onEvent: @Sendable (_ event: HookEvent, _ profile: String?) -> Void
     private var listener: NWListener?
     private var readyPort: UInt16?
 
@@ -34,10 +41,10 @@ final class HookServer: @unchecked Sendable {
 
     /// `allInterfaces` binds the port on every interface, IPv4 and IPv6, for remote mode (blether-csm6b:
     /// LAN-only, no authentication). False binds loopback only.
-    init(port: UInt16 = HookServer.defaultPort, allInterfaces: Bool = false, onText: @escaping @Sendable (_ text: String, _ profile: String?) -> Void) {
+    init(port: UInt16 = HookServer.defaultPort, allInterfaces: Bool = false, onEvent: @escaping @Sendable (_ event: HookEvent, _ profile: String?) -> Void) {
         requestedPort = port
         self.allInterfaces = allInterfaces
-        self.onText = onText
+        self.onEvent = onEvent
     }
 
     /// Binds and waits (at most two seconds) for the listener to be ready.
@@ -175,19 +182,23 @@ final class HookServer: @unchecked Sendable {
         // Answer before any speech work so the hook never waits on synthesis.
         respond(session, status: 200, body: #"{"ok":true}"#)
 
-        guard payload.hookEventName == "Stop" else {
-            Log.log("hook \(payload.hookEventName) ignored")
-            return
-        }
-        let text = SpeechText.stripMarkdown(payload.lastAssistantMessage ?? "")
-        guard !text.isEmpty else {
-            Log.log("hook Stop: empty reply, nothing to speak")
-            return
-        }
         let profile = request.query["profile"]
         let label = profile.map { " (profile: \($0))" } ?? ""
-        Log.log("hook Stop\(label): \(Log.preview(text))")
-        onText(text, profile)
+        switch payload.hookEventName {
+        case "Stop":
+            let text = SpeechText.stripMarkdown(payload.lastAssistantMessage ?? "")
+            guard !text.isEmpty else {
+                Log.log("hook Stop: empty reply, nothing to speak")
+                return
+            }
+            Log.log("hook Stop\(label): \(Log.preview(text))")
+            onEvent(.stop(text: text), profile)
+        case "Notification":
+            Log.log("hook Notification\(label)")
+            onEvent(.notification, profile)
+        default:
+            Log.log("hook \(payload.hookEventName) ignored")
+        }
     }
 
     private static let reasons: [Int: String] = [

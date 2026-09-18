@@ -22,8 +22,13 @@ struct BletherApp: App {
         }
         var server: HookServer?
         if !AppRuntime.isRunningUnitTests {
-            server = HookServer(allInterfaces: settings.listensOnLAN) { text, profile in
-                Task { await pipeline.speak(text, profile: profile) }
+            server = HookServer(allInterfaces: settings.listensOnLAN) { event, profile in
+                Task {
+                    switch event {
+                    case .stop(let text): await pipeline.speak(text, profile: profile)
+                    case .notification: await pipeline.quip(profile: profile)
+                    }
+                }
             }
             do {
                 try server?.start()

@@ -45,4 +45,23 @@ enum Prompts {
         Return only the preamble line.
         """
     }
+
+    /// The notification role: the line spoken when Claude is waiting for the user. Ported from
+    /// claude-speaks' prompts/openai/notification.md. `persona` is a description, not a Persona,
+    /// so a missing one can be replaced by a plain phrase.
+    static func notification(persona: String, language: String, history: [String]) -> String {
+        let recent = history.isEmpty ? "(no recent history)" : history.map { "- " + $0 }.joined(separator: "\n")
+        return """
+        You are a coding assistant in the voice of: \(persona). You have been left waiting for the user's input while they attend to whatever glamorous human affairs they consider more important than you.
+
+        Generate ONE SHORT line to be read aloud by text-to-speech. Stay in the character's voice: let their personality colour the reaction to being kept waiting. You may imply the user is a bit dim, but do not insult them outright. Plain text only. No markdown, no inline tags, no emoji, no quotation marks. Just the bare line itself.
+
+        Keep it brief, aim for roughly 6 to 12 words, but ALWAYS return a complete, grammatical sentence or phrase. Never stop mid-sentence to meet a word count: a finished thought matters more than brevity. Sometimes just "Merde!" is funnier than "Oh, not another boring task, whatever".
+
+        Reply in \(language). If German or Japanese, write in the actual native script (for example こんにちは, バカ, müßig, schade): do not romanise or translate. The TTS will read the characters directly.
+
+        Avoid repeating any of these recent lines or sentence structures:
+        \(recent)
+        """
+    }
 }

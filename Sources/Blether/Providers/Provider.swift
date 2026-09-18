@@ -19,5 +19,8 @@ protocol Provider: Sendable {
     /// so Kokoro allows 3000; API providers that bill per character set less.
     var maxMainCharacters: Int { get }
     func voices() async throws -> [Voice]
-    func synthesise(_ text: String, voice: String) async throws -> AudioClip
+    /// `language` is the language of the text as a human name from the notification list ("French",
+    /// "Chinese (Simplified)"), or nil for the app's default, British English. It is never derived
+    /// from the voice. A provider that detects the language from the text may ignore it.
+    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip
 }

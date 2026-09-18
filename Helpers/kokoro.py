@@ -3,6 +3,7 @@
 # dependencies = [
 #   "mlx-audio>=0.5.1",
 #   "misaki[en]>=0.9.4",
+#   "misaki[zh]>=0.9.4",
 #   "soundfile>=0.13",
 #   "numpy",
 #   "en-core-web-sm",

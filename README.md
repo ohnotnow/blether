@@ -115,6 +115,18 @@ Add this to `~/.claude/settings.json` (merge it if you already have a
           }
         ]
       }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8765/hook",
+            "async": true
+          }
+        ]
+      }
     ]
   }
 }
@@ -131,6 +143,22 @@ back to you. `"async": true` tells it to fire the hook and move on. blether
 answers the request as soon as the payload decodes, before any speech work,
 so the hook is quick either way, but async keeps it from ever getting in
 your way.
+
+The `Notification` entry is optional. Claude Code fires it when Claude is
+waiting for you, a permission prompt or an idle session, and blether answers
+with one short line in character, in a language picked at random from the
+list in Settings > Behaviour. The last ten lines are fed back to the LLM so
+it does not repeat itself. If something is already playing the line is
+dropped rather than queued, and if the LLM fails you hear a beep instead.
+Leave the entry out, or turn Notifications off in Settings > Behaviour, and
+those events are ignored.
+
+The language list is one language per line with a weight after a space, such
+as `French 5`; higher weights come up more often, and the name is sent to the
+LLM as written, so `Glaswegian 3` works too. Kokoro pronounces English,
+French, Spanish, Italian, Portuguese, Hindi and Chinese properly. Japanese
+needs extra Python packages the helper does not install, so a Japanese line
+is read as if it were English.
 
 ## Voices and personas
 

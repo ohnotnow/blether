@@ -4,6 +4,7 @@
 Flags: --delay N  seconds to wait before `ready`;  --fatal  print a fatal event and exit 1.
 Per request: voice "bad" is refused; text "crash" exits 3 without replying; text "hang" never
 replies; text "garble" replies with an id only; anything else writes 0.2 s of silence and says ok.
+A request carrying "lang" also writes that code to "<out>.lang", so tests can see what went on the wire.
 """
 import json
 import sys
@@ -43,4 +44,7 @@ for line in sys.stdin:
         f.setsampwidth(2)
         f.setframerate(24000)
         f.writeframes(b"\x00\x00" * 4800)
+    if "lang" in request:
+        with open(out + ".lang", "w") as f:
+            f.write(request["lang"])
     print(json.dumps({"id": request_id, "ok": True}), flush=True)

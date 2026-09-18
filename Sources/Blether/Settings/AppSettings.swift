@@ -17,10 +17,27 @@ final class AppSettings {
         static let isEnabled = "isEnabled"
         static let speaksPreamble = "speaksPreamble"
         static let speaksMainReply = "speaksMainReply"
+        static let speaksNotifications = "speaksNotifications"
+        static let notificationLanguages = "notificationLanguages"
+        static let recentQuips = "recentQuips"
         static let uvPath = "uvPath"
         static let listensOnLAN = "listensOnLAN"
     }
     private static let llmKeyAccount = "llm"
+
+    /// The old claude-speaks weighting (English rare, everything else 5), restricted to the languages
+    /// Kokoro can pronounce with what the helper installs. Japanese is deliberately absent: its
+    /// pronunciation model needs a compile step and a hand-run dictionary download (blether-Mzvjf).
+    static let defaultNotificationLanguages = """
+    English 1
+    French 5
+    Spanish 5
+    Italian 5
+    Portuguese 5
+    Hindi 5
+    Chinese (Simplified) 5
+    """
+    static let quipHistoryLimit = 10
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let keychain: KeychainStore
@@ -57,10 +74,11 @@ final class AppSettings {
         set { encode(newValue, Key.personas); revision += 1 }
     }
 
-    /// Never empty. An install from before profiles gets its old roles as a "Default" profile; nothing is
-    /// written until a profile setter runs.
+    /// Never empty. An install from before profiles gets its old roles as a "Default" profile, and a
+    /// profile saved before a role existed gets that role's defaults; nothing is written until a
+    /// profile setter runs.
     var profiles: [Profile] {
-        get { _ = revision; return decode(Key.profiles) ?? [migratedProfile()] }
+        get { _ = revision; return (decode(Key.profiles) ?? [migratedProfile()]).map(Self.fillingMissingRoles) }
         set { encode(newValue, Key.profiles); revision += 1 }
     }
 
@@ -138,6 +156,30 @@ final class AppSettings {
     var speaksMainReply: Bool {
         get { flag(Key.speaksMainReply) }
         set { defaults.set(newValue, forKey: Key.speaksMainReply); revision += 1 }
+    }
+
+    /// Speak a short in-character line on a Notification hook event. Off ignores those events.
+    var speaksNotifications: Bool {
+        get { flag(Key.speaksNotifications) }
+        set { defaults.set(newValue, forKey: Key.speaksNotifications); revision += 1 }
+    }
+
+    /// The languages a notification line may be written in, one per line with an optional weight,
+    /// as the user typed it. Parsed by NotificationLanguages at quip time, never here.
+    var notificationLanguages: String {
+        get { _ = revision; return defaults.string(forKey: Key.notificationLanguages) ?? Self.defaultNotificationLanguages }
+        set { defaults.set(newValue, forKey: Key.notificationLanguages); revision += 1 }
+    }
+
+    /// The last few notification lines, oldest first, fed back to the LLM so it does not repeat itself.
+    /// State rather than a preference, kept here so it shares the suite with everything else.
+    private(set) var recentQuips: [String] {
+        get { _ = revision; return defaults.stringArray(forKey: Key.recentQuips) ?? [] }
+        set { defaults.set(newValue, forKey: Key.recentQuips); revision += 1 }
+    }
+
+    func rememberQuip(_ line: String) {
+        recentQuips = Array((recentQuips + [line]).suffix(Self.quipHistoryLimit))
     }
 
     /// Bind the hook listener on every interface so other machines on the LAN can post replies.
@@ -235,7 +277,15 @@ final class AppSettings {
         return [
             .main: RoleSettings(personaID: nil, voiceID: voice),
             .monologue: RoleSettings(personaID: Persona.marvin.id, voiceID: voice),
+            .notification: RoleSettings(personaID: Persona.marvin.id, voiceID: voice),
         ]
+    }
+
+    /// A role added after a profile was saved (notification arrived in slice 4) starts from the defaults.
+    private static func fillingMissingRoles(_ profile: Profile) -> Profile {
+        var profile = profile
+        profile.roles.merge(defaultRoles()) { stored, _ in stored }
+        return profile
     }
 
     private func decode<T: Decodable>(_ key: String) -> T? {

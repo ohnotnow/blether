@@ -3,13 +3,25 @@ import Synchronization
 import XCTest
 @testable import Blether
 
-/// Thread-safe list of (text, profile) pairs the server handed to its callback.
+/// Thread-safe list of (event, profile) pairs the server handed to its callback.
 private final class Received: Sendable {
     struct Call: Equatable { let text: String; let profile: String? }
-    private let calls = Mutex<[Call]>([])
-    func append(_ text: String, _ profile: String?) { calls.withLock { $0.append(Call(text: text, profile: profile)) } }
-    var all: [String] { calls.withLock { $0.map(\.text) } }
-    var pairs: [Call] { calls.withLock { $0 } }
+    private let calls = Mutex<[(HookEvent, String?)]>([])
+    func append(_ event: HookEvent, _ profile: String?) { calls.withLock { $0.append((event, profile)) } }
+    /// The Stop texts, in order.
+    var all: [String] { pairs.map(\.text) }
+    /// The Stop calls, in order.
+    var pairs: [Call] {
+        calls.withLock { $0.compactMap { event, profile in
+            if case .stop(let text) = event { return Call(text: text, profile: profile) }
+            return nil
+        } }
+    }
+    /// The profile of each Notification call, in order.
+    var notifications: [String?] {
+        calls.withLock { $0.compactMap { event, profile in event == .notification ? .some(profile) : nil } }
+    }
+    var isEmpty: Bool { calls.withLock { $0.isEmpty } }
 }
 
 final class HookServerTests: XCTestCase {
@@ -18,8 +30,8 @@ final class HookServerTests: XCTestCase {
 
     override func setUpWithError() throws {
         let received = received
-        server = HookServer(port: 0) { text, profile in
-            received.append(text, profile)
+        server = HookServer(port: 0) { event, profile in
+            received.append(event, profile)
         }
         try server.start()
         XCTAssertNotNil(server.boundPort)
@@ -79,10 +91,22 @@ final class HookServerTests: XCTestCase {
         XCTAssertEqual(received.all, ["hi"])
     }
 
-    func testNonStopEventIsAcknowledgedNotSpoken() async throws {
-        let (status, _) = try await send("POST", "/hook", body: #"{"hook_event_name":"Notification","last_assistant_message":"x"}"#)
+    func testNotificationEventIsDeliveredWithItsProfile() async throws {
+        let (status, body) = try await send("POST", "/hook?profile=pi", body: #"{"hook_event_name":"Notification","message":"Claude is waiting for your input","notification_type":"idle_prompt"}"#)
         XCTAssertEqual(status, 200)
-        XCTAssertTrue(received.all.isEmpty)
+        XCTAssertEqual(body, #"{"ok":true}"#)
+        for _ in 0 ..< 40 where received.isEmpty {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(received.notifications, ["pi"])
+        XCTAssertTrue(received.all.isEmpty, "a notification carries no text")
+    }
+
+    func testUnknownEventIsAcknowledgedNotDelivered() async throws {
+        let (status, _) = try await send("POST", "/hook", body: #"{"hook_event_name":"PreToolUse","last_assistant_message":"x"}"#)
+        XCTAssertEqual(status, 200)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(received.isEmpty)
     }
 
     func testEmptyAfterStrippingIsNotSpoken() async throws {
