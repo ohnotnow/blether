@@ -8,7 +8,8 @@ persona preamble and compresses long replies, a settings window with a
 master on/off switch, Kokoro-82M on MLX run in a resident Python helper plus
 ElevenLabs, OpenAI, xAI and Mistral over their APIs, a provider per
 profile, remote mode, and an in-character quip on the Notification hook
-event. Listening (slice 8) and tone (slice 10) are still to come. README.md says what the app does; this file says how we
+event, and tone: an optional mood classifier (Jev or the LLM) whose label
+Mistral and OpenAI voices express. Listening (slice 8) is still to come. README.md says what the app does; this file says how we
 work on it.
 
 The thinking behind the design is written down in `ant`, so you do not have
@@ -40,9 +41,9 @@ to re-derive it or, worse, re-argue it.
    is not, what Kokoro is told about the language of the text).
 8. The slice 5 notes: `ant show blether-mYBCN` (the four API providers,
    the registry, provider per profile, the verified endpoint facts, and
-   why there are no live-check scripts) and `blether-uqwCr` (tone: the
-   mood classifier survives as its own slice, and how providers will
-   express it).
+   why there are no live-check scripts) and `blether-uqwCr` (tone, slice
+   10: why the mood classifier survives, decided once and expressed per
+   provider, reply clip only).
 9. The latest handover note (`ant list`, the newest "Handover" title). It
    says where things stand and what is next.
 10. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
@@ -91,7 +92,8 @@ blether-csm6b`).
   `HookServer` listens on 127.0.0.1:8765 (or every interface when "Listen
   on the network" is on) and reads `?profile=`, `SpeechPipeline` turns a reply
   into clips via `Speech/ReplyPlanner` and a Notification event into one
-  clip via `Speech/QuipPlanner`, `Providers/` synthesise them
+  clip via `Speech/QuipPlanner` (with `Speech/ToneClassifier` colouring
+  the reply when tone is on), `Providers/` synthesise them
   (`ProviderRegistry` holds them all; `KokoroProvider` over `HelperProcess`,
   which keeps `Helpers/kokoro.py` alive and talks JSON lines to it; the
   four API providers share `SpeechHTTP`), `PlaybackQueue` plays them one
