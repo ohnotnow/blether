@@ -16,10 +16,10 @@ struct ReplyPlanner: Sendable {
 
     /// `text` is already markdown-stripped and non-empty. With `includeMain` false the summariser is
     /// never called and only the preamble (if any) comes back; a preamble failure is then log only.
-    /// `mainCap` is the provider's `maxMainCharacters`.
-    func plan(_ text: String, monologuePersona: Persona?, mainPersona: Persona?, includePreamble: Bool, includeMain: Bool, mainCap: Int) async -> [PlannedClip] {
+    /// `mainCap` is the provider's `maxMainCharacters` and `markupHint` its `markupHint`.
+    func plan(_ text: String, monologuePersona: Persona?, mainPersona: Persona?, includePreamble: Bool, includeMain: Bool, mainCap: Int, markupHint: String? = nil) async -> [PlannedClip] {
         async let preambleResult = preamble(for: text, persona: includePreamble ? monologuePersona : nil)
-        let summary: Result<String, RoleFailure>? = includeMain ? await self.summary(of: text, persona: mainPersona) : nil
+        let summary: Result<String, RoleFailure>? = includeMain ? await self.summary(of: text, persona: mainPersona, markupHint: markupHint) : nil
         let preamble = await preambleResult
 
         var clips: [PlannedClip] = []
@@ -62,11 +62,11 @@ struct ReplyPlanner: Sendable {
     }
 
     /// The raw text when short or when the model returned nothing; a failure only when the call threw.
-    private func summary(of text: String, persona: Persona?) async -> Result<String, RoleFailure> {
+    private func summary(of text: String, persona: Persona?, markupHint: String?) async -> Result<String, RoleFailure> {
         let words = text.split(whereSeparator: \.isWhitespace).count
         guard words > Self.summaryWordThreshold else { return .success(text) }
         do {
-            let raw = try await llm.complete(system: Prompts.summary(preservingVoiceOf: persona), user: text)
+            let raw = try await llm.complete(system: Prompts.summary(preservingVoiceOf: persona, markupHint: markupHint), user: text)
             let rewritten = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'")).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !rewritten.isEmpty else { return .success(text) }
             Log.log("summary: \(words) words to \(rewritten.split(whereSeparator: \.isWhitespace).count)")

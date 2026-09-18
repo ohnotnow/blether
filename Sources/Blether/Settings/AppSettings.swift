@@ -134,6 +134,12 @@ final class AppSettings {
         if wasDefault { defaultProfileID = profiles[0].id }
     }
 
+    /// Unknown profile id is a no-op. nil provider means the registry's default.
+    func setProvider(id: String?, in profileID: String) {
+        guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
+        profiles[index].providerID = id
+    }
+
     /// Unknown id is a no-op.
     func updateRoles(_ roles: [Role: RoleSettings], in profileID: String) {
         guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
@@ -261,6 +267,41 @@ final class AppSettings {
     }
 
     var hasLLMKey: Bool { llmAPIKey != nil }
+
+    /// A speech provider's key, under a Keychain account named after the provider ("elevenlabs", "openai", ...).
+    func apiKey(for provider: String) -> String? {
+        _ = revision
+        do { return try keychain.secret(account: provider) } catch {
+            Log.log("keychain read failed for \(provider): \(error)")
+            return nil
+        }
+    }
+
+    /// nil removes the key.
+    func setAPIKey(_ key: String?, for provider: String) {
+        do {
+            if let key { try keychain.save(key, account: provider) } else { try keychain.delete(account: provider) }
+        } catch {
+            Log.log("keychain write failed for \(provider): \(error)")
+        }
+        revision += 1
+    }
+
+    func hasAPIKey(for provider: String) -> Bool { apiKey(for: provider) != nil }
+
+    /// A key reader for a provider to call from any thread at synthesis time. The Keychain is
+    /// thread-safe and the value is read on each call, so a key saved in Settings is used on the next
+    /// reply. Not `apiKey(for:)`: that is main-actor, and providers synthesise off it (a crash on
+    /// 2026-09-18 came from asserting otherwise).
+    nonisolated func apiKeyReader(for provider: String) -> @Sendable () -> String? {
+        let keychain = keychain
+        return {
+            do { return try keychain.secret(account: provider) } catch {
+                Log.log("keychain read failed for \(provider): \(error)")
+                return nil
+            }
+        }
+    }
 
     /// What an install from before profiles becomes: its stored roles, or the defaults, as "Default".
     private func migratedProfile() -> Profile {

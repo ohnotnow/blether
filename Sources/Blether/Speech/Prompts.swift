@@ -25,10 +25,17 @@ enum Prompts {
     Return only the rewritten text, nothing else.
     """
 
-    /// The summariser preserves a voice already in the reply when the main role has a persona.
-    static func summary(preservingVoiceOf persona: Persona?) -> String {
-        guard let persona else { return summary }
-        return summary + "\n\nThe reply you are about to compress is written in the voice of: \(persona.description). Preserve a beat that captures that voice."
+    /// The summariser preserves a voice already in the reply when the main role has a persona, and
+    /// learns the provider's inline tags when it has any (`Provider.markupHint`).
+    static func summary(preservingVoiceOf persona: Persona?, markupHint: String? = nil) -> String {
+        var prompt = summary
+        if let persona {
+            prompt += "\n\nThe reply you are about to compress is written in the voice of: \(persona.description). Preserve a beat that captures that voice."
+        }
+        if let markupHint {
+            prompt += "\n\n" + markupHint
+        }
+        return prompt
     }
 
     /// The monologue role adopts the persona and writes the line spoken before the reply.

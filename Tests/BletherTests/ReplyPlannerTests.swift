@@ -11,6 +11,14 @@ final class ReplyPlannerTests: XCTestCase {
         await planner.plan(text, monologuePersona: monologue, mainPersona: main, includePreamble: preamble, includeMain: mainReply, mainCap: cap)
     }
 
+    func testMarkupHintIsAppendedToTheSummaryPromptOnlyWhenGiven() async {
+        _ = await planner.plan(long, monologuePersona: nil, mainPersona: nil, includePreamble: false, includeMain: true, mainCap: 800, markupHint: "You may wrap a span in [sighs].")
+        XCTAssertTrue(llm.calls[0].system.hasSuffix("You may wrap a span in [sighs]."), llm.calls[0].system)
+        _ = await plan(long, preamble: false)
+        XCTAssertFalse(llm.calls[1].system.contains("[sighs]"))
+        XCTAssertEqual(llm.calls[1].system, Prompts.summary, "no persona, no hint: the bare prompt")
+    }
+
     func testMainClipUsesTheProvidersLargerCap() async {
         llm.summaryScript = { _ in "" }
         let text = Array(repeating: "abcdefghi", count: 200).joined(separator: " ")

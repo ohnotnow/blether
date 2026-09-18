@@ -4,4 +4,7 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
     let id: String
     var name: String
     var roles: [Role: RoleSettings]
+    /// Which provider speaks this profile (`Provider.name`). nil means the registry's default, and
+    /// profiles saved before slice 5 decode with nil.
+    var providerID: String?
 }

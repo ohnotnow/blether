@@ -1,13 +1,14 @@
 import SwiftUI
 
-/// The persona list (shared by every profile), then the profile being edited, then for each role (in
-/// heard order) which persona writes the words and which voice speaks them, in that profile.
-/// Voices load once, off the render path; there are about 180 of them.
+/// The persona list (shared by every profile), then the profile being edited with its provider, then
+/// for each role (in heard order) which persona writes the words and which voice speaks them, in that
+/// profile. Each provider's voices load once per window, off the render path, when a profile using
+/// it is first shown; a list that is empty or failed turns the voice pickers into typed-id fields.
 struct VoicesSection: View {
     @Bindable var settings: AppSettings
-    let provider: any Provider
-    @State private var voices: [Voice] = []
-    @State private var voicesFailed = false
+    let registry: ProviderRegistry
+    @State private var voicesByProvider: [String: [Voice]] = [:]
+    @State private var voiceErrors: [String: String] = [:]
     @State private var editing: PersonaEditor.Mode?
     /// Empty until `.task` runs; settings are not read while the view is being built.
     @State private var editingProfileID = ""
@@ -24,11 +25,17 @@ struct VoicesSection: View {
         } header: {
             Text("Profiles, voices and personas")
         } footer: {
-            if voicesFailed { Text("Could not load voices") }
+            if let error = voiceErrors[editingProvider.name] {
+                Text(error)
+            } else if voices.isEmpty {
+                Text("No voices listed for \(ProviderRegistry.displayName(id: editingProvider.name)); type a voice id.")
+            }
         }
         .task {
             select(settings.defaultProfileID)
-            do { voices = try await provider.voices() } catch { voicesFailed = true }
+        }
+        .task(id: editingProvider.name) {
+            await loadVoices(for: editingProvider)
         }
         .sheet(item: $editing) { mode in
             PersonaEditor(mode: mode) { name, description in
@@ -71,6 +78,22 @@ struct VoicesSection: View {
 
     private var isEditingDefault: Bool { editingProfile.id == settings.defaultProfileID }
 
+    private var editingProvider: any Provider { registry.provider(id: editingProfile.providerID) }
+
+    private var voices: [Voice] { voicesByProvider[editingProvider.name] ?? [] }
+
+    /// Once per provider per window. A failure is shown in the footer and the pickers fall back to text.
+    private func loadVoices(for provider: any Provider) async {
+        guard voicesByProvider[provider.name] == nil else { return }
+        do {
+            voicesByProvider[provider.name] = try await provider.voices()
+            voiceErrors[provider.name] = nil
+        } catch {
+            voicesByProvider[provider.name] = []
+            voiceErrors[provider.name] = "Could not load \(ProviderRegistry.displayName(id: provider.name)) voices: \(error). Type a voice id below."
+        }
+    }
+
     @ViewBuilder
     private var profileRows: some View {
         Picker("Profile", selection: Binding(get: { editingProfile.id }, set: { select($0) })) {
@@ -80,6 +103,11 @@ struct VoicesSection: View {
         }
         TextField("Profile name", text: $nameDraft)
             .onChange(of: nameDraft) { _, name in settings.renameProfile(id: editingProfile.id, name: name) }
+        Picker("Provider", selection: Binding(get: { editingProvider.name }, set: { settings.setProvider(id: $0, in: editingProfile.id) })) {
+            ForEach(registry.ids, id: \.self) { id in
+                Text(ProviderRegistry.displayName(id: id)).tag(id)
+            }
+        }
         Toggle(isOn: Binding(get: { isEditingDefault }, set: { if $0 { settings.defaultProfileID = editingProfile.id } })) {
             VStack(alignment: .leading) {
                 Text("Default profile")
@@ -128,16 +156,20 @@ struct VoicesSection: View {
                     Text(persona.name).tag(Optional(persona.id))
                 }
             }
-            Picker("\(role.displayName) voice", selection: binding(for: role, \.voiceID)) {
-                let stored = binding(for: role, \.voiceID).wrappedValue
-                if !voices.isEmpty, !voices.contains(where: { $0.id == stored }) {
-                    // The stored voice has gone from this Mac; name it so the picker is never blank.
-                    Text("Unavailable voice").tag(stored)
-                }
-                ForEach(languages, id: \.self) { language in
-                    Section(Self.languageName(language)) {
-                        ForEach(voices.filter { $0.language == language }, id: \.id) { voice in
-                            Text(voice.name).tag(voice.id)
+            if voices.isEmpty {
+                TextField("\(role.displayName) voice id", text: binding(for: role, \.voiceID))
+            } else {
+                Picker("\(role.displayName) voice", selection: binding(for: role, \.voiceID)) {
+                    let stored = binding(for: role, \.voiceID).wrappedValue
+                    if !voices.contains(where: { $0.id == stored }) {
+                        // The stored voice is not in this provider's list; name it so the picker is never blank.
+                        Text("Unavailable voice (\(stored))").tag(stored)
+                    }
+                    ForEach(languages, id: \.self) { language in
+                        Section(Self.languageName(language)) {
+                            ForEach(voices.filter { $0.language == language }, id: \.id) { voice in
+                                Text(voice.name).tag(voice.id)
+                            }
                         }
                     }
                 }

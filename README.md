@@ -19,16 +19,18 @@ and never expose the port to the internet.
 
 ## Status
 
-Slice 6. The voice is [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-bf16)
-running locally on Apple Silicon through MLX, one LLM writes a short Marvin
-preamble and compresses long replies for listening, and a settings window
-covers the lot: the LLM endpoint, model and key, your personas, profiles
-with a voice and persona per role, and switches for speaking, the preamble,
-the reply and listening on the network. A hook on another machine, or in
-one project, picks its profile by URL. No listening yet. A Claude Code Stop hook posts the reply to the app and you
+Five providers: [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-bf16)
+running locally on Apple Silicon through MLX, and ElevenLabs, OpenAI, xAI
+and Mistral over their APIs with your own keys. One LLM writes a short
+Marvin preamble, compresses long replies for listening, and quips in
+character when Claude is waiting for you. A settings window covers the lot:
+the LLM endpoint, model and key, a key per provider, your personas, profiles
+with a provider and a voice and persona per role, and switches for speaking,
+the preamble, the reply, notifications and listening on the network. A hook
+on another machine, or in one project, picks its profile by URL. No
+listening yet. A Claude Code Stop hook posts the reply to the app and you
 hear it, replies queue rather than talk over each other, and a hotkey stops
-everything. More providers (ElevenLabs, OpenAI, xAI, Mistral) and the rest
-are on the way.
+everything.
 
 ## The LLM
 
@@ -164,9 +166,10 @@ is read as if it were English.
 
 A persona is a name and a one-line character description that slots into
 "in the voice of...". Marvin ships as the default and you can add your own in
-the Voices and personas section of the settings window. Each role, the
-preamble and the reply, gets a persona (or none) and one of Kokoro's voices,
-grouped by language.
+the Profiles, voices and personas section of the settings window. Each role,
+the preamble, the reply and the notification, gets a persona (or none) and a
+voice from the profile's provider, grouped by language where the provider
+says which language a voice is.
 
 ## Profiles
 
@@ -203,6 +206,27 @@ name on the end:
 Names are matched ignoring case. A name with spaces goes in the URL
 percent-encoded, and the settings window shows the exact string to paste
 under each profile.
+
+## Providers
+
+A provider is a speech service. Five are built in: Kokoro, which runs on
+this Mac for free, and ElevenLabs, OpenAI, xAI and Mistral, which need an
+account and a key. Paste each key in Settings > Providers; it goes into your
+macOS Keychain and is sent only to that service. Then pick the provider on
+each profile in the Profiles section, so the Pi's Hermes can speak through
+xAI while your local Claude uses ElevenLabs and a third profile stays on
+Kokoro.
+
+The voice pickers follow the provider. ElevenLabs, xAI and Mistral list the
+voices your account can use once a key is saved; OpenAI's list is fixed
+(alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse,
+marin and cedar). If a list cannot be fetched, or you know an id the list
+does not show, type it into the voice field instead.
+
+The API providers bill per character, so a reply spoken through one is
+capped at 800 characters after the LLM has compressed it, where Kokoro
+allows 3000. ElevenLabs and xAI also understand a few inline delivery tags,
+so with those two the LLM is told it may add one or two.
 
 ## Remote mode
 
@@ -257,7 +281,7 @@ the reply and strips the markdown. The LLM writes a one-line preamble in Marvin'
 replies over 60 words, a compressed version of the reply. Each line is
 rendered to audio by Kokoro and added to a queue that plays one clip at a
 time. A reply that arrives while audio is already playing skips the
-preamble.
+preamble. Which provider renders the audio is the profile's choice.
 
 Kokoro lives in `Helpers/kokoro.py`, bundled into the app and run with
 `uv run`. The app talks to it in JSON lines over stdin and stdout: the
@@ -269,10 +293,12 @@ different local model to the same protocol.
 What blether keeps in `UserDefaults` (domain `uk.ohnotnow.blether`):
 `llmBaseURL`, `llmModel`, `llmExtraBody`, `personas`, `profiles`,
 `defaultProfileID`, `isEnabled`, `speaksPreamble`, `speaksMainReply`,
+`speaksNotifications`, `notificationLanguages`, `recentQuips`,
 `listensOnLAN`, `uvPath`, and the two shortcuts under
 `KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. An
 older `roles` key is read once to seed the Default profile and never written
-again. The LLM key is in Keychain only.
+again. The LLM key and the provider keys are in Keychain only, one item
+each.
 
 ## Licence
 

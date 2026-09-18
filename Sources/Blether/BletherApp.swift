@@ -9,15 +9,15 @@ struct BletherApp: App {
     private let queue: PlaybackQueue
     private let pipeline: SpeechPipeline
     private let hookServer: HookServer?
-    private let provider: any Provider
+    private let registry: ProviderRegistry
 
     init() {
         if !AppRuntime.isRunningUnitTests { Log.rotateIfLarge() }
         let state = AppState()
         let settings = AppSettings()
         let queue = PlaybackQueue()
-        let provider = Self.makeProvider(settings: settings, state: state)
-        let pipeline = SpeechPipeline(provider: provider, queue: queue, settings: settings) { settings in
+        let registry = Self.makeRegistry(settings: settings, state: state)
+        let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings) { settings in
             ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
         }
         var server: HookServer?
@@ -42,7 +42,7 @@ struct BletherApp: App {
             KeyboardShortcuts.onKeyUp(for: .toggleSpeaking) {
                 setSpeaking(!settings.isEnabled, settings: settings, queue: queue)
             }
-            if let kokoro = provider as? KokoroProvider {
+            if let kokoro = registry.provider(id: "kokoro") as? KokoroProvider {
                 // Warm at launch (the user's decision, 2026-09-17) and kill on quit so no python outlives us.
                 Task { await kokoro.start() }
                 NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
@@ -50,7 +50,7 @@ struct BletherApp: App {
                 }
             }
         }
-        self.provider = provider
+        self.registry = registry
         _settings = State(initialValue: settings)
         self.queue = queue
         self.pipeline = pipeline
@@ -58,9 +58,22 @@ struct BletherApp: App {
         _appState = State(initialValue: state)
     }
 
+    /// Kokoro first, then the four API providers. Each reads its key from Keychain at call time, off
+    /// the main actor, through `apiKeyReader`.
+    @MainActor
+    private static func makeRegistry(settings: AppSettings, state: AppState) -> ProviderRegistry {
+        ProviderRegistry([
+            makeKokoro(settings: settings, state: state),
+            ElevenLabsProvider(apiKey: settings.apiKeyReader(for: "elevenlabs")),
+            OpenAIProvider(apiKey: settings.apiKeyReader(for: "openai")),
+            XAIProvider(apiKey: settings.apiKeyReader(for: "xai")),
+            MistralProvider(apiKey: settings.apiKeyReader(for: "mistral")),
+        ])
+    }
+
     /// Kokoro through its bundled helper, or a stand-in that fails audibly when uv or the script is missing.
     @MainActor
-    private static func makeProvider(settings: AppSettings, state: AppState) -> any Provider {
+    private static func makeKokoro(settings: AppSettings, state: AppState) -> any Provider {
         guard let script = Bundle.main.url(forResource: "kokoro", withExtension: "py") else {
             state.providerStatus = "Kokoro: helper script missing from the app bundle"
             return UnavailableProvider(reason: "helper script missing")
@@ -111,7 +124,7 @@ struct BletherApp: App {
             .keyboardShortcut("q")
         }
         Settings {
-            SettingsView(settings: settings, speaking: speaking, provider: provider)
+            SettingsView(settings: settings, speaking: speaking, registry: registry)
         }
     }
 }

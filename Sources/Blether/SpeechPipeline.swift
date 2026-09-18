@@ -1,18 +1,24 @@
 import AppKit
 
-/// Joins the listener to the planner, a provider and the playback queue: text in, audio queued.
+/// Joins the listener to the planner, the providers and the playback queue: text in, audio queued.
+/// The provider is chosen per reply from the profile the hook named.
 final class SpeechPipeline: Sendable {
-    private let provider: any Provider
+    private let registry: ProviderRegistry
     private let queue: PlaybackQueue
     private let settings: AppSettings
     /// Built per reply so an edited endpoint takes effect on the next reply without a relaunch.
     private let makeLLM: @Sendable @MainActor (AppSettings) -> any LLM
 
-    init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
-        self.provider = provider
+    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+        self.registry = registry
         self.queue = queue
         self.settings = settings
         self.makeLLM = makeLLM
+    }
+
+    /// One provider for everything; the tests and any single-provider caller.
+    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, makeLLM: makeLLM)
     }
 
     /// Everything read from main-actor state, in one hop, at the moment the reply arrives.
@@ -24,6 +30,7 @@ final class SpeechPipeline: Sendable {
         let monologuePersona: Persona?
         let mainPersona: Persona?
         let voices: [Role: String]
+        let provider: any Provider
         let llm: any LLM
     }
 
@@ -45,9 +52,11 @@ final class SpeechPipeline: Sendable {
                 monologuePersona: settings.persona(for: .monologue, in: profile),
                 mainPersona: settings.persona(for: .main, in: profile),
                 voices: Dictionary(uniqueKeysWithValues: Role.allCases.map { ($0, settings.voiceID(for: $0, in: profile)) }),
+                provider: registry.provider(id: profile.providerID),
                 llm: makeLLM(settings)
             )
         }
+        let provider = snapshot.provider
         let includePreamble = snapshot.preambleSkipReason == nil
         if let reason = snapshot.preambleSkipReason { Log.log("\(reason), skipping the preamble") }
         guard includePreamble || snapshot.speaksMainReply else {
@@ -57,7 +66,7 @@ final class SpeechPipeline: Sendable {
 
         let clips = await ReplyPlanner(llm: snapshot.llm).plan(
             text, monologuePersona: snapshot.monologuePersona, mainPersona: snapshot.mainPersona,
-            includePreamble: includePreamble, includeMain: snapshot.speaksMainReply, mainCap: provider.maxMainCharacters
+            includePreamble: includePreamble, includeMain: snapshot.speaksMainReply, mainCap: provider.maxMainCharacters, markupHint: provider.markupHint
         )
 
         // Synthesise concurrently, but hand clips to the queue in planned order as each becomes ready.
@@ -74,7 +83,7 @@ final class SpeechPipeline: Sendable {
             for await (index, result) in group {
                 ready[index] = result
                 while let result = ready.removeValue(forKey: next) {
-                    await deliver(clips[next], result, generation: snapshot.generation)
+                    await deliver(clips[next], result, generation: snapshot.generation, provider: provider)
                     next += 1
                 }
             }
@@ -88,6 +97,7 @@ final class SpeechPipeline: Sendable {
         let voice: String
         let languages: NotificationLanguages
         let history: [String]
+        let provider: any Provider
         let llm: any LLM
     }
 
@@ -115,10 +125,12 @@ final class SpeechPipeline: Sendable {
                 voice: settings.voiceID(for: .notification, in: profile),
                 languages: NotificationLanguages(parsing: settings.notificationLanguages),
                 history: settings.recentQuips,
+                provider: registry.provider(id: profile.providerID),
                 llm: makeLLM(settings)
             )
         }
         guard let snapshot else { return }
+        let provider = snapshot.provider
 
         guard let quip = await QuipPlanner(llm: snapshot.llm).plan(persona: snapshot.persona, languages: snapshot.languages, history: snapshot.history) else {
             Log.log("notification line failed, beeping")
@@ -155,7 +167,7 @@ final class SpeechPipeline: Sendable {
         return profile
     }
 
-    private func deliver(_ clip: PlannedClip, _ result: Result<AudioClip, Error>, generation: Int) async {
+    private func deliver(_ clip: PlannedClip, _ result: Result<AudioClip, Error>, generation: Int, provider: any Provider) async {
         switch result {
         case .success(let audio):
             await queue.enqueue(audio, generation: generation)

@@ -4,8 +4,14 @@ import XCTest
 /// Records every synthesis request and can be told to fail for texts containing a marker.
 private final class RecordingProvider: Provider, @unchecked Sendable {
     struct Call: Equatable { let text: String; let voice: String; let language: String?; let url: URL }
-    let name = "recording"
-    let maxMainCharacters = 800
+    let name: String
+    let maxMainCharacters: Int
+    let markupHint: String?
+    init(name: String = "recording", maxMainCharacters: Int = 800, markupHint: String? = nil) {
+        self.name = name
+        self.maxMainCharacters = maxMainCharacters
+        self.markupHint = markupHint
+    }
     private let lock = NSLock()
     private var recorded: [Call] = []
     var failOnTextContaining: String?
@@ -188,6 +194,50 @@ final class SpeechPipelineTests: XCTestCase {
         let pipeline = pipeline(provider: StopsMidSynthesisProvider(queue: queue))
         await pipeline.speak(long)
         XCTAssertTrue(players.isEmpty)
+    }
+
+    // MARK: - Provider per profile
+
+    private lazy var second = RecordingProvider(name: "second", maxMainCharacters: 20, markupHint: "You may use [sigh].")
+    private lazy var registry = ProviderRegistry([provider, second])
+
+    /// Finishing a clip starts the next, so finish until the queue is idle.
+    private func drainQueue() {
+        while queue.isPlaying { players.last?.finish() }
+    }
+
+    private func registryPipeline() -> SpeechPipeline {
+        let llm = llm
+        return SpeechPipeline(registry: registry, queue: queue, settings: settings) { _ in llm }
+    }
+
+    func testProfileProviderIsUsedForReplyAndQuipAndDefaultOtherwise() async {
+        let pi = settings.addProfile(name: "pi")
+        settings.setProvider(id: "second", in: pi.id)
+        let pipeline = registryPipeline()
+
+        await pipeline.speak(long, profile: "pi")
+        XCTAssertEqual(second.calls.count, 2)
+        XCTAssertTrue(provider.calls.isEmpty)
+        drainQueue()
+
+        await pipeline.quip(profile: "pi")
+        XCTAssertEqual(second.calls.count, 3)
+        XCTAssertTrue(provider.calls.isEmpty)
+        drainQueue()
+
+        await pipeline.speak(long)
+        XCTAssertEqual(provider.calls.count, 2, "the default profile has no provider, so the registry's default")
+        XCTAssertEqual(second.calls.count, 3)
+    }
+
+    func testProfileProviderSuppliesTheCapAndTheMarkupHint() async {
+        settings.setProvider(id: "second", in: "default")
+        llm.summaryScript = { _ in "A summary that is longer than twenty characters" }
+        await registryPipeline().speak(long)
+        let main = second.calls.first { $0.voice == "v-main" }
+        XCTAssertLessThanOrEqual(main!.text.count, 21, "capped at the second provider's 20 plus the ellipsis")
+        XCTAssertTrue(llm.calls.first { $0.system.contains("Compress") }!.system.hasSuffix("You may use [sigh]."))
     }
 
     // MARK: - Notifications

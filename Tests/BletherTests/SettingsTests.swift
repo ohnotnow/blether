@@ -292,6 +292,50 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(settings.defaultProfileID, "default")
     }
 
+    @MainActor func testProfileProviderDefaultsToNilAndRoundTrips() throws {
+        let settings = settings
+        XCTAssertNil(settings.defaultProfile.providerID)
+        let old = try JSONEncoder().encode([Profile(id: "default", name: "Default", roles: [:])])
+        defaults.set(old, forKey: "profiles")
+        XCTAssertNil(self.settings.defaultProfile.providerID, "a profile saved before providers decodes")
+
+        settings.setProvider(id: "openai", in: "default")
+        XCTAssertEqual(settings.defaultProfile.providerID, "openai")
+        XCTAssertEqual(self.settings.defaultProfile.providerID, "openai")
+        settings.setProvider(id: nil, in: "default")
+        XCTAssertNil(settings.defaultProfile.providerID)
+        settings.setProvider(id: "xai", in: "ghost")
+        XCTAssertNil(settings.defaultProfile.providerID)
+    }
+
+    @MainActor func testProviderKeysLiveInKeychainOnePerProvider() throws {
+        let settings = settings
+        XCTAssertNil(settings.apiKey(for: "elevenlabs"))
+        XCTAssertFalse(settings.hasAPIKey(for: "elevenlabs"))
+        settings.setAPIKey("el-1", for: "elevenlabs")
+        settings.setAPIKey("oa-1", for: "openai")
+        XCTAssertEqual(settings.apiKey(for: "elevenlabs"), "el-1")
+        XCTAssertEqual(settings.apiKey(for: "openai"), "oa-1")
+        XCTAssertTrue(settings.hasAPIKey(for: "openai"))
+        XCTAssertNil(settings.apiKey(for: "xai"))
+        XCTAssertNil(settings.llmAPIKey, "the LLM key is a separate account")
+        settings.setAPIKey(nil, for: "elevenlabs")
+        XCTAssertNil(settings.apiKey(for: "elevenlabs"))
+        XCTAssertEqual(settings.apiKey(for: "openai"), "oa-1")
+        settings.setAPIKey(nil, for: "openai")
+    }
+
+    /// Providers call the reader from their own tasks; it must not touch the main actor.
+    @MainActor func testAPIKeyReaderWorksOffTheMainActorAndSeesLaterSaves() async {
+        let settings = settings
+        let read = settings.apiKeyReader(for: "xai")
+        settings.setAPIKey("x-1", for: "xai")
+        let offMain = await Task.detached { read() }.value
+        XCTAssertEqual(offMain, "x-1")
+        settings.setAPIKey(nil, for: "xai")
+        XCTAssertNil(read())
+    }
+
     @MainActor func testDeletePersonaClearsItFromEveryProfile() {
         let settings = settings
         let pi = settings.addProfile(name: "pi")
