@@ -1,6 +1,16 @@
 import XCTest
 @testable import Blether
 
+private struct StubClassifier: ToneClassifier {
+    let result: Result<Tone, Error>
+    let counter = Counter()
+    final class Counter: @unchecked Sendable { var calls = 0 }
+    func classify(_ text: String) async throws -> Tone {
+        counter.calls += 1
+        return try result.get()
+    }
+}
+
 final class ReplyPlannerTests: XCTestCase {
     private let llm = FakeLLM()
     private lazy var planner = ReplyPlanner(llm: llm)
@@ -9,6 +19,26 @@ final class ReplyPlannerTests: XCTestCase {
 
     private func plan(_ text: String, monologue: Persona? = .marvin, main: Persona? = nil, preamble: Bool = true, mainReply: Bool = true, cap: Int = 800) async -> [PlannedClip] {
         await planner.plan(text, monologuePersona: monologue, mainPersona: main, includePreamble: preamble, includeMain: mainReply, mainCap: cap)
+    }
+
+    func testClassifierColoursTheMainClipOnly() async {
+        let classifier = StubClassifier(result: .success(.sad))
+        let clips = await planner.plan(short, monologuePersona: .marvin, mainPersona: nil, includePreamble: true, includeMain: true, mainCap: 800, classifier: classifier)
+        XCTAssertEqual(clips.map(\.tone), [nil, .sad])
+        XCTAssertEqual(classifier.counter.calls, 1)
+    }
+
+    func testClassifierFailureIsSilentAndNeutral() async {
+        let classifier = StubClassifier(result: .failure(URLError(.cannotConnectToHost)))
+        let clips = await planner.plan(short, monologuePersona: nil, mainPersona: nil, includePreamble: false, includeMain: true, mainCap: 800, classifier: classifier)
+        XCTAssertEqual(clips, [PlannedClip(text: short, role: .main, tone: nil)])
+        XCTAssertFalse(clips[0].text.contains("Heads up"))
+    }
+
+    func testClassifierIsNotCalledWhenTheReplyIsOff() async {
+        let classifier = StubClassifier(result: .success(.sad))
+        _ = await planner.plan(long, monologuePersona: .marvin, mainPersona: nil, includePreamble: true, includeMain: false, mainCap: 800, classifier: classifier)
+        XCTAssertEqual(classifier.counter.calls, 0)
     }
 
     func testMarkupHintIsAppendedToTheSummaryPromptOnlyWhenGiven() async {

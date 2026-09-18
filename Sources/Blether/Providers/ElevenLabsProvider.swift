@@ -22,7 +22,7 @@ struct ElevenLabsProvider: Provider {
     }
 
     /// `language` is ignored: eleven_v3 is multilingual and detects it from the text.
-    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip {
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip {
         let url = URL(string: "https://api.elevenlabs.io/v1/text-to-speech/\(voice)?output_format=\(Self.outputFormat)")!
         let data = try await SpeechHTTP.post(url, auth: try auth(), json: Request(text: text, modelID: Self.modelID), session: session)
         Log.log("elevenlabs synth voice=\(voice) chars=\(text.count) bytes=\(data.count)")

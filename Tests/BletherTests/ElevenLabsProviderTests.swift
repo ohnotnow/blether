@@ -28,7 +28,7 @@ final class ElevenLabsProviderTests: XCTestCase {
             XCTAssertEqual(json["model_id"] as? String, "eleven_v3")
             XCTAssertEqual(json.count, 2)
         }
-        let clip = try await provider.synthesise("Hello", voice: "v1", language: "French")
+        let clip = try await provider.synthesise("Hello", voice: "v1", language: "French", tone: nil)
         defer { try? FileManager.default.removeItem(at: clip.url) }
         XCTAssertEqual(clip.url.pathExtension, "mp3")
         XCTAssertEqual(try Data(contentsOf: clip.url), Data([0xFF, 0xFB, 1]))
@@ -36,7 +36,7 @@ final class ElevenLabsProviderTests: XCTestCase {
 
     func testUnauthorisedAndMissingKey() async {
         ProviderTestSupport.respond(401, Data("{}".utf8))
-        await ProviderTestSupport.assertHTTP(401) { _ = try await provider.synthesise("x", voice: "v1", language: nil) }
+        await ProviderTestSupport.assertHTTP(401) { _ = try await provider.synthesise("x", voice: "v1", language: nil, tone: nil) }
         await ProviderTestSupport.assertNoKeyThrowsWithoutARequest { _ = try await keyless.voices() }
     }
 

@@ -34,7 +34,7 @@ struct XAIProvider: Provider {
     }
 
     /// `language` is ignored: "auto" is sent whatever the argument.
-    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip {
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip {
         let url = URL(string: "https://api.x.ai/v1/tts")!
         let data = try await SpeechHTTP.post(url, auth: try auth(), json: Request(text: text, voiceID: voice), session: session)
         Log.log("xai synth voice=\(voice) chars=\(text.count) bytes=\(data.count)")

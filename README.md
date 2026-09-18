@@ -23,10 +23,12 @@ Five providers: [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-bf1
 running locally on Apple Silicon through MLX, and ElevenLabs, OpenAI, xAI
 and Mistral over their APIs with your own keys. One LLM writes a short
 Marvin preamble, compresses long replies for listening, and quips in
-character when Claude is waiting for you. A settings window covers the lot:
-the LLM endpoint, model and key, a key per provider, your personas, profiles
-with a provider and a voice and persona per role, and switches for speaking,
-the preamble, the reply, notifications and listening on the network. A hook
+character when Claude is waiting for you. An optional classifier reads the
+mood of each reply so Mistral and OpenAI voices can match it. A settings
+window covers the lot: the LLM endpoint, model and key, a key per provider,
+tone, your personas, profiles with a provider and a voice and persona per
+role, and switches for speaking, the preamble, the reply, notifications and
+listening on the network. A hook
 on another machine, or in one project, picks its profile by URL. No
 listening yet. A Claude Code Stop hook posts the reply to the app and you
 hear it, replies queue rather than talk over each other, and a hotkey stops
@@ -228,6 +230,22 @@ capped at 800 characters after the LLM has compressed it, where Kokoro
 allows 3000. ElevenLabs and xAI also understand a few inline delivery tags,
 so with those two the LLM is told it may add one or two.
 
+## Tone
+
+Off by default. Switched on, blether works out the mood of each reply,
+one of nine styles from neutral through sarcasm to shameful, and the voice
+matches it where the provider can: Mistral by picking the styled variant
+of the voice, OpenAI by a delivery instruction. Kokoro, ElevenLabs and xAI
+sound the same either way. The preamble and the notification line are
+not affected; Marvin is always Marvin.
+
+Settings > Tone has three choices. "Jev" is a small classification model
+from Typesafe built for exactly this kind of question; it needs its own
+key, pasted in the row that appears when you pick it. "Your LLM" asks the
+model you already configured, which works but adds a second call per
+reply. If the classifier fails, the reply is spoken neutral and the log
+says why; you will not hear about it.
+
 ## Remote mode
 
 Claude Code on another machine can send its replies here to be spoken, each
@@ -293,12 +311,12 @@ different local model to the same protocol.
 What blether keeps in `UserDefaults` (domain `uk.ohnotnow.blether`):
 `llmBaseURL`, `llmModel`, `llmExtraBody`, `personas`, `profiles`,
 `defaultProfileID`, `isEnabled`, `speaksPreamble`, `speaksMainReply`,
-`speaksNotifications`, `notificationLanguages`, `recentQuips`,
+`speaksNotifications`, `notificationLanguages`, `recentQuips`, `toneSource`,
 `listensOnLAN`, `uvPath`, and the two shortcuts under
 `KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. An
 older `roles` key is read once to seed the Default profile and never written
-again. The LLM key and the provider keys are in Keychain only, one item
-each.
+again. The LLM key, the provider keys and the Jev key are in Keychain only, one
+item each.
 
 ## Licence
 

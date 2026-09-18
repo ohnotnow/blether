@@ -6,5 +6,5 @@ struct UnavailableProvider: Provider {
     let reason: String
 
     func voices() async throws -> [Voice] { throw ProviderError.other(reason) }
-    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip { throw ProviderError.other(reason) }
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip { throw ProviderError.other(reason) }
 }

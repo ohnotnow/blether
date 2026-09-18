@@ -5,7 +5,7 @@ private struct NamedProvider: Provider {
     let name: String
     let maxMainCharacters = 800
     func voices() async throws -> [Voice] { [] }
-    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip { throw ProviderError.noAudio }
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip { throw ProviderError.noAudio }
 }
 
 final class ProviderRegistryTests: XCTestCase {

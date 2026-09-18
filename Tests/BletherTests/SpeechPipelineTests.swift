@@ -3,7 +3,7 @@ import XCTest
 
 /// Records every synthesis request and can be told to fail for texts containing a marker.
 private final class RecordingProvider: Provider, @unchecked Sendable {
-    struct Call: Equatable { let text: String; let voice: String; let language: String?; let url: URL }
+    struct Call: Equatable { let text: String; let voice: String; let language: String?; let tone: Tone?; let url: URL }
     let name: String
     let maxMainCharacters: Int
     let markupHint: String?
@@ -19,11 +19,11 @@ private final class RecordingProvider: Provider, @unchecked Sendable {
     var calls: [Call] { lock.withLock { recorded } }
 
     func voices() async throws -> [Voice] { [] }
-    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip {
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip {
         if failAll { throw ProviderError.noAudio }
         if let marker = failOnTextContaining, text.contains(marker) { throw ProviderError.noAudio }
         let clip = makeTestClip()
-        lock.withLock { recorded.append(Call(text: text, voice: voice, language: language, url: clip.url)) }
+        lock.withLock { recorded.append(Call(text: text, voice: voice, language: language, tone: tone, url: clip.url)) }
         return clip
     }
 }
@@ -38,7 +38,7 @@ private final class StartsPlaybackMidSynthesisProvider: Provider, @unchecked Sen
     var urls: [URL] { lock.withLock { made } }
     init(queue: PlaybackQueue) { self.queue = queue }
     func voices() async throws -> [Voice] { [] }
-    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip {
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip {
         await queue.enqueue(makeTestClip())
         let clip = makeTestClip()
         lock.withLock { made.append(clip.url) }
@@ -52,7 +52,7 @@ private struct StopsMidSynthesisProvider: Provider {
     let maxMainCharacters = 800
     let queue: PlaybackQueue
     func voices() async throws -> [Voice] { [] }
-    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip {
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip {
         await queue.stop()
         return makeTestClip()
     }
@@ -238,6 +238,28 @@ final class SpeechPipelineTests: XCTestCase {
         let main = second.calls.first { $0.voice == "v-main" }
         XCTAssertLessThanOrEqual(main!.text.count, 21, "capped at the second provider's 20 plus the ellipsis")
         XCTAssertTrue(llm.calls.first { $0.system.contains("Compress") }!.system.hasSuffix("You may use [sigh]."))
+    }
+
+    // MARK: - Tone
+
+    func testToneFromTheLLMReachesTheReplyClipOnly() async {
+        settings.toneSource = .llm
+        llm.toneScript = { _ in #"{"style": "confident"}"# }
+        await pipeline().speak(long)
+        XCTAssertEqual(llm.toneCalls, 1)
+        XCTAssertEqual(provider.calls.first { $0.voice == "v-main" }?.tone, .confident)
+        XCTAssertNil(provider.calls.first { $0.voice == "v-mono" }?.tone)
+    }
+
+    func testToneOffMakesNoClassifierCallAndTheQuipCarriesNone() async {
+        await pipeline().speak(long)
+        XCTAssertEqual(llm.toneCalls, 0)
+        XCTAssertEqual(Set(provider.calls.map(\.tone)), [nil])
+        drainQueue()
+        settings.toneSource = .llm
+        await pipeline().quip()
+        XCTAssertEqual(llm.toneCalls, 0)
+        XCTAssertNil(provider.calls.last?.tone)
     }
 
     // MARK: - Notifications

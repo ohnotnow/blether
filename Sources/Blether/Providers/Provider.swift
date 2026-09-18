@@ -22,7 +22,9 @@ protocol Provider: Sendable {
     /// `language` is the language of the text as a human name from the notification list ("French",
     /// "Chinese (Simplified)"), or nil for the app's default, British English. It is never derived
     /// from the voice. A provider that detects the language from the text may ignore it.
-    func synthesise(_ text: String, voice: String, language: String?) async throws -> AudioClip
+    /// `tone` is the mood of the text, nil when tone is off or the clip is not the reply. A provider
+    /// that cannot express it ignores it.
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip
     /// A paragraph appended to the summary prompt naming the inline tags this provider's synthesis
     /// understands (ElevenLabs audio tags, xAI prosody tags). nil means plain text only.
     var markupHint: String? { get }

@@ -40,14 +40,14 @@ final class XAIProviderTests: XCTestCase {
             XCTAssertEqual(format["sample_rate"] as? Int, 24000)
             XCTAssertEqual(format["bit_rate"] as? Int, 64000)
         }
-        let clip = try await provider.synthesise("Hello", voice: "eve", language: "French")
+        let clip = try await provider.synthesise("Hello", voice: "eve", language: "French", tone: nil)
         defer { try? FileManager.default.removeItem(at: clip.url) }
         XCTAssertEqual(try Data(contentsOf: clip.url), Data([3, 4]))
     }
 
     func testPaymentRequiredAndMissingKey() async {
         ProviderTestSupport.respond(402, Data("{}".utf8))
-        await ProviderTestSupport.assertHTTP(402) { _ = try await provider.synthesise("x", voice: "eve", language: nil) }
+        await ProviderTestSupport.assertHTTP(402) { _ = try await provider.synthesise("x", voice: "eve", language: nil, tone: nil) }
         await ProviderTestSupport.assertNoKeyThrowsWithoutARequest { _ = try await keyless.voices() }
     }
 

@@ -11,6 +11,7 @@ struct SettingsView: View {
         Form {
             LLMSection(settings: settings)
             ProvidersSection(settings: settings, registry: registry)
+            ToneSection(settings: settings)
             VoicesSection(settings: settings, registry: registry)
             BehaviourSection(settings: settings, speaking: speaking)
             AdvancedSection(settings: settings)

@@ -3,6 +3,8 @@ import Foundation
 struct PlannedClip: Equatable, Sendable {
     let text: String
     let role: Role
+    /// The reply's mood, on the main clip only, when a classifier ran and succeeded.
+    var tone: Tone? = nil
 }
 
 /// Turns a stripped reply into ordered clips: an optional in-character preamble, then the
@@ -16,11 +18,14 @@ struct ReplyPlanner: Sendable {
 
     /// `text` is already markdown-stripped and non-empty. With `includeMain` false the summariser is
     /// never called and only the preamble (if any) comes back; a preamble failure is then log only.
-    /// `mainCap` is the provider's `maxMainCharacters` and `markupHint` its `markupHint`.
-    func plan(_ text: String, monologuePersona: Persona?, mainPersona: Persona?, includePreamble: Bool, includeMain: Bool, mainCap: Int, markupHint: String? = nil) async -> [PlannedClip] {
+    /// `mainCap` is the provider's `maxMainCharacters` and `markupHint` its `markupHint`. A `classifier`
+    /// runs alongside the summary and colours the main clip; its failure is log only.
+    func plan(_ text: String, monologuePersona: Persona?, mainPersona: Persona?, includePreamble: Bool, includeMain: Bool, mainCap: Int, markupHint: String? = nil, classifier: (any ToneClassifier)? = nil) async -> [PlannedClip] {
         async let preambleResult = preamble(for: text, persona: includePreamble ? monologuePersona : nil)
+        async let toneResult = tone(of: text, classifier: includeMain ? classifier : nil)
         let summary: Result<String, RoleFailure>? = includeMain ? await self.summary(of: text, persona: mainPersona, markupHint: markupHint) : nil
         let preamble = await preambleResult
+        let tone = await toneResult
 
         var clips: [PlannedClip] = []
         if case .success(let line?) = preamble {
@@ -33,8 +38,21 @@ struct ReplyPlanner: Sendable {
         if !failed.isEmpty {
             main = "Heads up, the \(failed.joined(separator: " and ")) call fell over. Raw reply coming up. " + main
         }
-        clips.append(PlannedClip(text: SpeechText.cap(main, limit: mainCap), role: .main))
+        clips.append(PlannedClip(text: SpeechText.cap(main, limit: mainCap), role: .main, tone: tone))
         return clips
+    }
+
+    /// nil when no classifier was wanted or it failed; a failure is logged and never spoken.
+    private func tone(of text: String, classifier: (any ToneClassifier)?) async -> Tone? {
+        guard let classifier else { return nil }
+        do {
+            let tone = try await classifier.classify(text)
+            Log.log("tone: \(tone.rawValue)")
+            return tone
+        } catch {
+            Log.log("tone error: \(error)")
+            return nil
+        }
     }
 
     /// nil when no preamble was wanted or the model returned nothing usable; a failure only when the call threw.

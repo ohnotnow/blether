@@ -336,6 +336,15 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(read())
     }
 
+    @MainActor func testToneSourceDefaultsOffRoundTripsAndIgnoresGarbage() {
+        let settings = settings
+        XCTAssertEqual(settings.toneSource, .off)
+        settings.toneSource = .jev
+        XCTAssertEqual(self.settings.toneSource, .jev)
+        defaults.set("vibes", forKey: "toneSource")
+        XCTAssertEqual(self.settings.toneSource, .off)
+    }
+
     @MainActor func testDeletePersonaClearsItFromEveryProfile() {
         let settings = settings
         let pi = settings.addProfile(name: "pi")

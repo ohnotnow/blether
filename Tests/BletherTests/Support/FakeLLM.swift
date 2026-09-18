@@ -9,12 +9,15 @@ final class FakeLLM: LLM, @unchecked Sendable {
     var preambleScript: Script = { _ in "Oh joy, another reply" }
     var summaryScript: Script = { _ in "Compressed." }
     var quipScript: Script = { _ in "Typical." }
+    var toneScript: Script = { _ in #"{"style": "neutral"}"# }
 
     var calls: [(system: String, user: String)] { lock.withLock { recorded } }
     // The summary prompt itself contains the word "preamble", so route on the summary's phrase.
     private static func isSummary(_ system: String) -> Bool { system.contains("Compress aggressively") }
     private static func isQuip(_ system: String) -> Bool { system.contains("left waiting") }
-    var preambleCalls: Int { calls.filter { !Self.isSummary($0.system) && !Self.isQuip($0.system) }.count }
+    private static func isTone(_ system: String) -> Bool { system.contains("classify the tone") }
+    var preambleCalls: Int { calls.filter { !Self.isSummary($0.system) && !Self.isQuip($0.system) && !Self.isTone($0.system) }.count }
+    var toneCalls: Int { calls.filter { Self.isTone($0.system) }.count }
     var summaryCalls: Int { calls.filter { Self.isSummary($0.system) }.count }
     var quipCalls: Int { calls.filter { Self.isQuip($0.system) }.count }
 
@@ -22,6 +25,7 @@ final class FakeLLM: LLM, @unchecked Sendable {
         lock.withLock { recorded.append((system, user)) }
         if Self.isSummary(system) { return try summaryScript(user) }
         if Self.isQuip(system) { return try quipScript(user) }
+        if Self.isTone(system) { return try toneScript(user) }
         return try preambleScript(user)
     }
 }

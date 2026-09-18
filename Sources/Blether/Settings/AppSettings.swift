@@ -3,6 +3,19 @@ import Observation
 
 /// Everything the user can set, backed by UserDefaults, with the LLM key in Keychain.
 /// Defaults point at a local Ollama so a fresh install works with no configuration.
+/// The three ways a reply's mood can be decided. The Jev key lives under the Keychain account "jev".
+enum ToneSource: String, CaseIterable, Sendable {
+    case off, jev, llm
+
+    var displayName: String {
+        switch self {
+        case .off: "Off"
+        case .jev: "Jev"
+        case .llm: "Your LLM"
+        }
+    }
+}
+
 @MainActor @Observable
 final class AppSettings {
     private enum Key {
@@ -22,6 +35,7 @@ final class AppSettings {
         static let recentQuips = "recentQuips"
         static let uvPath = "uvPath"
         static let listensOnLAN = "listensOnLAN"
+        static let toneSource = "toneSource"
     }
     private static let llmKeyAccount = "llm"
 
@@ -193,6 +207,12 @@ final class AppSettings {
     var listensOnLAN: Bool {
         get { _ = revision; return defaults.bool(forKey: Key.listensOnLAN) }
         set { defaults.set(newValue, forKey: Key.listensOnLAN); revision += 1 }
+    }
+
+    /// Who decides a reply's mood, if anyone (blether-uqwCr). Off by default; an unknown stored value reads as off.
+    var toneSource: ToneSource {
+        get { _ = revision; return defaults.string(forKey: Key.toneSource).flatMap(ToneSource.init(rawValue:)) ?? .off }
+        set { defaults.set(newValue.rawValue, forKey: Key.toneSource); revision += 1 }
     }
 
     /// Where `uv` lives, when it is not in one of the usual places. Empty means look for it.

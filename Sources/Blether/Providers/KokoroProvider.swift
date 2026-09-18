@@ -26,7 +26,7 @@ final class KokoroProvider: Provider, Sendable {
         return await helper.voices.map { Voice(id: $0.id, name: $0.name, language: $0.language) }
     }
 
-    func synthesise(_ text: String, voice id: String, language: String?) async throws -> AudioClip {
+    func synthesise(_ text: String, voice id: String, language: String?, tone: Tone?) async throws -> AudioClip {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
         do {
             try await helper.request(text: text, voice: id, out: url, lang: Self.langCode(for: language), timeout: requestTimeout)

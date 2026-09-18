@@ -32,6 +32,7 @@ final class SpeechPipeline: Sendable {
         let voices: [Role: String]
         let provider: any Provider
         let llm: any LLM
+        let classifier: (any ToneClassifier)?
     }
 
     /// `profile` is the name from the hook URL; nil, blank or unknown means the default profile.
@@ -44,6 +45,7 @@ final class SpeechPipeline: Sendable {
         }
         let snapshot = await MainActor.run {
             let profile = resolveProfile(named: name)
+            let llm = makeLLM(settings)
             return Snapshot(
                 generation: queue.generation,
                 // Playback rule 4: no preamble when the reply will queue behind audio already playing.
@@ -53,7 +55,8 @@ final class SpeechPipeline: Sendable {
                 mainPersona: settings.persona(for: .main, in: profile),
                 voices: Dictionary(uniqueKeysWithValues: Role.allCases.map { ($0, settings.voiceID(for: $0, in: profile)) }),
                 provider: registry.provider(id: profile.providerID),
-                llm: makeLLM(settings)
+                llm: llm,
+                classifier: classifier(for: settings.toneSource, llm: llm)
             )
         }
         let provider = snapshot.provider
@@ -66,7 +69,8 @@ final class SpeechPipeline: Sendable {
 
         let clips = await ReplyPlanner(llm: snapshot.llm).plan(
             text, monologuePersona: snapshot.monologuePersona, mainPersona: snapshot.mainPersona,
-            includePreamble: includePreamble, includeMain: snapshot.speaksMainReply, mainCap: provider.maxMainCharacters, markupHint: provider.markupHint
+            includePreamble: includePreamble, includeMain: snapshot.speaksMainReply, mainCap: provider.maxMainCharacters, markupHint: provider.markupHint,
+            classifier: snapshot.classifier
         )
 
         // Synthesise concurrently, but hand clips to the queue in planned order as each becomes ready.
@@ -74,7 +78,7 @@ final class SpeechPipeline: Sendable {
             for (index, clip) in clips.enumerated() {
                 let voice = snapshot.voices[clip.role] ?? KokoroProvider.defaultVoiceID
                 group.addTask { [provider] in
-                    do { return (index, .success(try await provider.synthesise(clip.text, voice: voice, language: nil))) }
+                    do { return (index, .success(try await provider.synthesise(clip.text, voice: voice, language: nil, tone: clip.tone))) }
                     catch { return (index, .failure(error)) }
                 }
             }
@@ -141,7 +145,7 @@ final class SpeechPipeline: Sendable {
 
         let audio: AudioClip
         do {
-            audio = try await provider.synthesise(quip.text, voice: snapshot.voice, language: quip.language)
+            audio = try await provider.synthesise(quip.text, voice: snapshot.voice, language: quip.language, tone: nil)
         } catch {
             Log.log("synthesis failed (\(provider.name), notification): \(error)")
             await MainActor.run { NSSound.beep() }
@@ -154,6 +158,16 @@ final class SpeechPipeline: Sendable {
             } else {
                 queue.enqueue(audio, generation: snapshot.generation)
             }
+        }
+    }
+
+    /// Off is nil; Jev reads its key off the main actor like the providers; the LLM path reuses this reply's client.
+    @MainActor
+    private func classifier(for source: ToneSource, llm: any LLM) -> (any ToneClassifier)? {
+        switch source {
+        case .off: nil
+        case .jev: JevToneClassifier(apiKey: settings.apiKeyReader(for: "jev"))
+        case .llm: LLMToneClassifier(llm: llm)
         }
     }
 
