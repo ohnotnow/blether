@@ -2,12 +2,13 @@
 
 Hello. You are in blether, a macOS menubar app in Swift that speaks Claude
 CLI replies aloud. It is the successor to two Python projects, claude-speaks
-and claude-listens. As of 2026-09-18 slices 1 to 4, 6 and 7 are built: the
-hook listener, a playback queue with a stop hotkey, one LLM that writes a
+and claude-listens. As of 2026-09-18 slices 1 to 7 are built: the hook
+listener, a playback queue with a stop hotkey, one LLM that writes a
 persona preamble and compresses long replies, a settings window with a
-master on/off switch, Kokoro-82M on MLX as the voice, run in a resident
-Python helper, profiles with remote mode, and an in-character quip on the
-Notification hook event. Listening and further speech providers are still to come. README.md says what the app does; this file says how we
+master on/off switch, Kokoro-82M on MLX run in a resident Python helper plus
+ElevenLabs, OpenAI, xAI and Mistral over their APIs, a provider per
+profile, remote mode, and an in-character quip on the Notification hook
+event. Listening (slice 8) and tone (slice 10) are still to come. README.md says what the app does; this file says how we
 work on it.
 
 The thinking behind the design is written down in `ant`, so you do not have
@@ -37,13 +38,18 @@ to re-derive it or, worse, re-argue it.
 7. The slice 4 decisions: `ant show blether-Mzvjf` (the notification quip,
    the language roulette, why Chinese is in the default list and Japanese
    is not, what Kokoro is told about the language of the text).
-8. The latest handover note (`ant list`, the newest "Handover" title). It
+8. The slice 5 notes: `ant show blether-mYBCN` (the four API providers,
+   the registry, provider per profile, the verified endpoint facts, and
+   why there are no live-check scripts) and `blether-uqwCr` (tone: the
+   mood classifier survives as its own slice, and how providers will
+   express it).
+9. The latest handover note (`ant list`, the newest "Handover" title). It
    says where things stand and what is next.
-9. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
+10. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
    An informal notepad of macOS Swift gotchas from earlier projects, not
    rules. blether departs from it in one place: no App Sandbox (see the
    decisions table for why).
-10. Only if you need the history and have the sibling checkouts:
+11. Only if you need the history and have the sibling checkouts:
    `../claude-speaks` has `ant show cs-XKtxA` and `ant show cs-Ed6UZ` (the
    two conversations that shaped the rewrite), and `../claude-listens` has
    `TECHNICAL_OVERVIEW.md` for the channels wire contract.
@@ -73,7 +79,7 @@ The speech **roles** are main (the reply), monologue (the in-character
 preamble) and notification (the quip when Claude is waiting). In the
 settings window they are shown as Reply, Preamble and Notification.
 
-A **profile** is a named voice and persona per role. A hook picks one with
+A **profile** is a named provider plus a voice and persona per role. A hook picks one with
 `?profile=<name>` on the hook URL; the default profile speaks when none is
 named or the name is unknown. Not "source": that was the earlier sketch.
 Remote mode has no shared secret; blether is LAN-only (`ant show
@@ -86,9 +92,10 @@ blether-csm6b`).
   on the network" is on) and reads `?profile=`, `SpeechPipeline` turns a reply
   into clips via `Speech/ReplyPlanner` and a Notification event into one
   clip via `Speech/QuipPlanner`, `Providers/` synthesise them
-  (`KokoroProvider` over `HelperProcess`, which keeps `Helpers/kokoro.py`
-  alive and talks JSON lines to it), `PlaybackQueue` plays them one at a
-  time. The log is `~/Library/Logs/blether.log`. `Settings/` holds the
+  (`ProviderRegistry` holds them all; `KokoroProvider` over `HelperProcess`,
+  which keeps `Helpers/kokoro.py` alive and talks JSON lines to it; the
+  four API providers share `SpeechHTTP`), `PlaybackQueue` plays them one
+  at a time. The profile chooses the provider. The log is `~/Library/Logs/blether.log`. `Settings/` holds the
   UserDefaults-backed store (`AppSettings`) and the settings window, one
   file per section. `LLM/` is the chat-completions client.
 - `Tests/BletherTests/`: XCTest, one file per source file, fakes under
