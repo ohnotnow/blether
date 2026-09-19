@@ -14,10 +14,19 @@ enum HookServerError: Error, CustomStringConvertible {
     }
 }
 
-/// What a hook payload asks for. Stop carries the reply, markdown already stripped; Notification
-/// carries nothing (its message and type are ignored on purpose, the hook matcher filters types).
+/// Which Claude Code session a reply came from, so a spoken answer can go back to it. `id` is the
+/// payload's session_id; `pid` is the Claude Code process, from `?pid=$PPID` on the hook URL (spike A,
+/// blether-ZP9vQ). Either may be missing; the channel registry tries id, then pid.
+struct SessionKey: Sendable, Equatable, Hashable {
+    let id: String?
+    let pid: Int32?
+}
+
+/// What a hook payload asks for. Stop carries the reply, markdown already stripped, and the session it
+/// came from; Notification carries nothing (its message and type are ignored on purpose, the hook
+/// matcher filters types).
 enum HookEvent: Sendable, Equatable {
-    case stop(text: String)
+    case stop(text: String, session: SessionKey)
     case notification
 }
 
@@ -191,8 +200,9 @@ final class HookServer: @unchecked Sendable {
                 Log.log("hook Stop: empty reply, nothing to speak")
                 return
             }
+            let session = SessionKey(id: payload.sessionId, pid: request.query["pid"].flatMap { Int32($0) })
             Log.log("hook Stop\(label): \(Log.preview(text))")
-            onEvent(.stop(text: text), profile)
+            onEvent(.stop(text: text, session: session), profile)
         case "Notification":
             Log.log("hook Notification\(label)")
             onEvent(.notification, profile)

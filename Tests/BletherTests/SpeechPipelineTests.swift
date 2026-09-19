@@ -59,6 +59,12 @@ private struct StopsMidSynthesisProvider: Provider {
 }
 
 @MainActor
+final class FakeEars: EarsArming {
+    private(set) var armed: [SessionKey] = []
+    func arm(for session: SessionKey) { armed.append(session) }
+}
+
+@MainActor
 final class SpeechPipelineTests: XCTestCase {
     private let fakes = FakePlayers()
     private var players: [FakePlayer] { fakes.all }
@@ -79,12 +85,54 @@ final class SpeechPipelineTests: XCTestCase {
         UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
     }
 
+    private let ears = FakeEars()
+    private let session = SessionKey(id: "s-1", pid: 77)
+
     private func pipeline(provider: (any Provider)? = nil) -> SpeechPipeline {
         let llm = llm
-        return SpeechPipeline(provider: provider ?? self.provider, queue: queue, settings: settings) { [weak self] _ in
+        return SpeechPipeline(provider: provider ?? self.provider, queue: queue, settings: settings, ears: ears) { [weak self] _ in
             MainActor.assumeIsolated { self?.makeLLMCalls += 1 }
             return llm
         }
+    }
+
+    // MARK: - Arming the ears (blether-UkLWZ.8.6)
+
+    func testListeningOnArmsTheEarsAfterTheLastClipPlays() async {
+        settings.listensAfterReply = true
+        await pipeline().speak(long, session: session)
+        XCTAssertEqual(ears.armed, [], "not before the reply has been heard")
+        drainQueue()
+        XCTAssertEqual(ears.armed, [session])
+    }
+
+    func testListeningOffNeverArms() async {
+        await pipeline().speak(long, session: session)
+        drainQueue()
+        XCTAssertEqual(ears.armed, [])
+    }
+
+    func testPreambleOnlyReplyStillArms() async {
+        settings.listensAfterReply = true
+        settings.speaksMainReply = false
+        // Rule 3 skips the preamble while listening, so turn that rule's input off: nothing would play otherwise.
+        await pipeline().speak(long, session: session)
+        drainQueue()
+        XCTAssertEqual(ears.armed, [], "listening on plus reply off plays nothing, so nothing arms")
+    }
+
+    func testFailedLastClipArmsAtOnceRatherThanNever() async {
+        settings.listensAfterReply = true
+        provider.failAll = true
+        await pipeline().speak(long, session: session)
+        XCTAssertEqual(ears.armed, [session])
+    }
+
+    func testNoSessionMeansNoArming() async {
+        settings.listensAfterReply = true
+        await pipeline().speak(long)
+        drainQueue()
+        XCTAssertEqual(ears.armed, [])
     }
 
     func testIdleQueuePlaysPreambleThenMainInTheirOwnVoices() async {

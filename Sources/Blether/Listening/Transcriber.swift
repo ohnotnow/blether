@@ -3,6 +3,8 @@ import TranscribeCpp
 
 /// Speech to text. `Transcriber` is the real one over Canary; tests use a fake.
 protocol Transcribing: Sendable {
+    /// Fetch and load whatever is needed so the first transcription is quick. Safe to call repeatedly.
+    func warmUp() async throws
     func transcribe(_ pcm: [Float]) async throws -> String
 }
 

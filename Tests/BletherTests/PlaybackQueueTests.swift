@@ -75,6 +75,30 @@ final class PlaybackQueueTests: XCTestCase {
         XCTAssertTrue(clips.allSatisfy { !fileExists($0) })
     }
 
+    func testOnFinishedFiresAfterThatClipEndsAndOnlyThatClip() {
+        var fired: [String] = []
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("first") })
+        queue.enqueue(makeTestClip())
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("third") })
+        XCTAssertEqual(fired, [])
+        players[0].finish()
+        XCTAssertEqual(fired, ["first"])
+        players[1].finish()
+        XCTAssertEqual(fired, ["first"])
+        players[2].finish()
+        XCTAssertEqual(fired, ["first", "third"])
+        XCTAssertFalse(queue.isPlaying)
+    }
+
+    func testOnFinishedDoesNotFireWhenStopKillsTheClip() {
+        var fired = 0
+        queue.enqueue(makeTestClip(), onFinished: { fired += 1 })
+        queue.enqueue(makeTestClip(), onFinished: { fired += 1 })
+        queue.stop()
+        players[0].finish()
+        XCTAssertEqual(fired, 0, "a reply the user killed must not open the ears")
+    }
+
     func testStopKillsCurrentAndDropsTheRest() {
         let clips = [makeTestClip(), makeTestClip(), makeTestClip()]
         clips.forEach { queue.enqueue($0) }

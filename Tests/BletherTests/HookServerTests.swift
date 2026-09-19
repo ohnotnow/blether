@@ -6,14 +6,14 @@ import XCTest
 /// Thread-safe list of (event, profile) pairs the server handed to its callback.
 private final class Received: Sendable {
     struct Call: Equatable { let text: String; let profile: String? }
-    private let calls = Mutex<[(HookEvent, String?)]>([])
+    let calls = Mutex<[(HookEvent, String?)]>([])
     func append(_ event: HookEvent, _ profile: String?) { calls.withLock { $0.append((event, profile)) } }
     /// The Stop texts, in order.
     var all: [String] { pairs.map(\.text) }
     /// The Stop calls, in order.
     var pairs: [Call] {
         calls.withLock { $0.compactMap { event, profile in
-            if case .stop(let text) = event { return Call(text: text, profile: profile) }
+            if case .stop(let text, _) = event { return Call(text: text, profile: profile) }
             return nil
         } }
     }
@@ -64,6 +64,27 @@ final class HookServerTests: XCTestCase {
         for _ in 0 ..< 40 where received.all.isEmpty {
             try await Task.sleep(for: .milliseconds(50))
         }
+    }
+
+    /// The session each Stop call named, in order.
+    private var sessions: [SessionKey] {
+        received.calls.withLock { $0.compactMap { event, _ in
+            if case .stop(_, let session) = event { return session }
+            return nil
+        } }
+    }
+
+    func testSessionIDFromTheBodyAndPidFromTheURLReachTheEvent() async throws {
+        _ = try await send("POST", "/hook?pid=4242", body: #"{"hook_event_name":"Stop","last_assistant_message":"hi","session_id":"abc-123"}"#)
+        try await waitForCallback()
+        XCTAssertEqual(sessions, [SessionKey(id: "abc-123", pid: 4242)])
+    }
+
+    func testMissingSessionAndPidGiveNilsNotARejection() async throws {
+        let (status, _) = try await send("POST", "/hook?pid=notanumber", body: #"{"hook_event_name":"Stop","last_assistant_message":"hi"}"#)
+        XCTAssertEqual(status, 200)
+        try await waitForCallback()
+        XCTAssertEqual(sessions, [SessionKey(id: nil, pid: nil)])
     }
 
     func testProfileQueryParameterIsForwarded() async throws {

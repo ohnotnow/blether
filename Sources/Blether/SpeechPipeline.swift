@@ -8,17 +8,20 @@ final class SpeechPipeline: Sendable {
     private let settings: AppSettings
     /// Built per reply so an edited endpoint takes effect on the next reply without a relaunch.
     private let makeLLM: @Sendable @MainActor (AppSettings) -> any LLM
+    /// Opens the microphone after a reply when listening is on. nil in tests that do not care.
+    private let ears: (any EarsArming)?
 
-    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
         self.registry = registry
         self.queue = queue
         self.settings = settings
+        self.ears = ears
         self.makeLLM = makeLLM
     }
 
     /// One provider for everything; the tests and any single-provider caller.
-    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
-        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, makeLLM: makeLLM)
+    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, ears: ears, makeLLM: makeLLM)
     }
 
     /// Everything read from main-actor state, in one hop, at the moment the reply arrives.
@@ -36,7 +39,8 @@ final class SpeechPipeline: Sendable {
     }
 
     /// `profile` is the name from the hook URL; nil, blank or unknown means the default profile.
-    func speak(_ text: String, profile name: String? = nil) async {
+    /// `session` is where a spoken answer goes once the last clip has played, when listening is on.
+    func speak(_ text: String, profile name: String? = nil, session: SessionKey? = nil) async {
         // Checked on its own before the snapshot: off must cost nothing, and the snapshot builds an LLM client.
         let isEnabled = await MainActor.run { settings.isEnabled }
         guard isEnabled else {
@@ -87,7 +91,8 @@ final class SpeechPipeline: Sendable {
             for await (index, result) in group {
                 ready[index] = result
                 while let result = ready.removeValue(forKey: next) {
-                    await deliver(clips[next], result, generation: snapshot.generation, provider: provider)
+                    let isLast = next == clips.count - 1
+                    await deliver(clips[next], result, generation: snapshot.generation, provider: provider, armAfter: isLast ? session : nil)
                     next += 1
                 }
             }
@@ -181,14 +186,22 @@ final class SpeechPipeline: Sendable {
         return profile
     }
 
-    private func deliver(_ clip: PlannedClip, _ result: Result<AudioClip, Error>, generation: Int, provider: any Provider) async {
+    /// `armAfter` is set for the reply's last clip: once it has played, the ears open for that session.
+    /// Listening is read here, at delivery, not in the snapshot, so switching it off mid-reply wins.
+    private func deliver(_ clip: PlannedClip, _ result: Result<AudioClip, Error>, generation: Int, provider: any Provider, armAfter session: SessionKey?) async {
+        let arm: (@MainActor () -> Void)? = await MainActor.run {
+            guard let session, let ears, settings.listensAfterReply else { return nil }
+            return { ears.arm(for: session) }
+        }
         switch result {
         case .success(let audio):
-            await queue.enqueue(audio, generation: generation)
+            await queue.enqueue(audio, generation: generation, onFinished: arm)
         case .failure(let error):
             Log.log("synthesis failed (\(provider.name), \(clip.role.rawValue)): \(error)")
             // The preamble is a garnish; losing the reply itself must be heard.
             if clip.role == .main { await MainActor.run { NSSound.beep() } }
+            // Nothing will finish playing for this clip, so open the ears now rather than never.
+            if let arm { await arm() }
         }
     }
 }

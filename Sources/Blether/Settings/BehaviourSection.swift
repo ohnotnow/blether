@@ -6,6 +6,8 @@ import SwiftUI
 struct BehaviourSection: View {
     @Bindable var settings: AppSettings
     let speaking: Binding<Bool>
+    /// Like speaking: switching listening off must also close an open microphone, so the app hands in its binding.
+    let listening: Binding<Bool>
     @State private var microphones: [AudioInputDevice] = []
 
     var body: some View {
@@ -14,7 +16,7 @@ struct BehaviourSection: View {
             toggle("Preamble", "Off skips the in-character line before the reply.", isOn: $settings.speaksPreamble)
             toggle("Reply", "Off plays only the preamble.", isOn: $settings.speaksMainReply)
             toggle("Notifications", "Off ignores Claude Code's Notification events. On speaks a short in-character line when Claude is waiting for you.", isOn: $settings.speaksNotifications)
-            toggle("Listen after Claude replies", "On opens the microphone when a reply finishes and sends what you say to that Claude Code session. Off never opens the microphone.", isOn: $settings.listensAfterReply)
+            toggle("Listen after Claude replies", "On opens the microphone when a reply finishes and sends what you say to that Claude Code session. Off never opens the microphone.", isOn: listening)
             TextField("Notification languages", text: $settings.notificationLanguages, axis: .vertical)
                 .lineLimit(3...12)
             Text("One per line, with a weight after a space, such as French 5. Higher weights are picked more often. The name is sent to the LLM as written.")

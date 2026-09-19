@@ -10,6 +10,7 @@ struct BletherApp: App {
     private let pipeline: SpeechPipeline
     private let hookServer: HookServer?
     private let registry: ProviderRegistry
+    private let ears: Ears
 
     init() {
         if !AppRuntime.isRunningUnitTests { Log.rotateIfLarge() }
@@ -17,7 +18,8 @@ struct BletherApp: App {
         let settings = AppSettings()
         let queue = PlaybackQueue()
         let registry = Self.makeRegistry(settings: settings, state: state)
-        let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings) { settings in
+        let ears = Self.makeEars(settings: settings, state: state)
+        let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings, ears: ears) { settings in
             ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
         }
         var server: HookServer?
@@ -25,7 +27,7 @@ struct BletherApp: App {
             server = HookServer(allInterfaces: settings.listensOnLAN) { event, profile in
                 Task {
                     switch event {
-                    case .stop(let text): await pipeline.speak(text, profile: profile)
+                    case .stop(let text, let session): await pipeline.speak(text, profile: profile, session: session)
                     case .notification: await pipeline.quip(profile: profile)
                     }
                 }
@@ -38,10 +40,13 @@ struct BletherApp: App {
             }
             KeyboardShortcuts.onKeyUp(for: .stopTalking) {
                 queue.stop()
-                // TODO(blether-UkLWZ.8.6): also cancel a live Recording through Ears once it exists.
+                ears.cancel()
             }
             KeyboardShortcuts.onKeyUp(for: .toggleSpeaking) {
                 setSpeaking(!settings.isEnabled, settings: settings, queue: queue)
+            }
+            if settings.listensAfterReply {
+                Task { await ears.warmUp() }
             }
             if let kokoro = registry.provider(id: "kokoro") as? KokoroProvider {
                 // Warm at launch (the user's decision, 2026-09-17) and kill on quit so no python outlives us.
@@ -52,6 +57,7 @@ struct BletherApp: App {
             }
         }
         self.registry = registry
+        self.ears = ears
         _settings = State(initialValue: settings)
         self.queue = queue
         self.pipeline = pipeline
@@ -99,6 +105,26 @@ struct BletherApp: App {
         Binding(get: { settings.isEnabled }, set: { setSpeaking($0, settings: settings, queue: queue) })
     }
 
+    /// Off closes an open microphone at once; on warms the model so the first reply is not kept waiting.
+    private var listening: Binding<Bool> {
+        Binding(get: { settings.listensAfterReply }, set: { on in
+            settings.listensAfterReply = on
+            if on { Task { await ears.warmUp() } } else { ears.cancel() }
+        })
+    }
+
+    /// Microphone, transcriber and sounds, with the status line going to the menubar. Transcripts go
+    /// nowhere until the channel server (blether-UkLWZ.8.7) provides `deliver`.
+    @MainActor
+    private static func makeEars(settings: AppSettings, state: AppState) -> Ears {
+        let transcriber = Transcriber(store: ModelStore()) { line in
+            Task { @MainActor in state.listeningStatus = line }
+        }
+        return Ears(settings: settings, microphone: Microphone(), transcriber: transcriber, sounds: SystemSounds(),
+                    status: { state.listeningStatus = $0 },
+                    deliver: { text, session in Log.log("heard for \(session.id ?? "?"): \(Log.preview(text)) (no channel yet)") })
+    }
+
     var body: some Scene {
         MenuBarExtra("blether", systemImage: MenuBarIcon.name(enabled: settings.isEnabled), isInserted: .constant(!AppRuntime.isRunningUnitTests)) {
             if let error = appState.listenerError {
@@ -114,7 +140,7 @@ struct BletherApp: App {
                 Divider()
             }
             Toggle("Speaking", isOn: speaking)
-            Toggle("Listening", isOn: $settings.listensAfterReply)
+            Toggle("Listening", isOn: listening)
             Button("Stop talking") {
                 queue.stop()
             }
@@ -130,7 +156,7 @@ struct BletherApp: App {
             .keyboardShortcut("q")
         }
         Settings {
-            SettingsView(settings: settings, speaking: speaking, registry: registry)
+            SettingsView(settings: settings, speaking: speaking, listening: listening, registry: registry)
         }
     }
 }

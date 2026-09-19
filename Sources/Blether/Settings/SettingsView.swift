@@ -5,6 +5,7 @@ struct SettingsView: View {
     let settings: AppSettings
     /// Flipping speaking must also silence the current clip, so the app hands in the binding it uses everywhere else.
     let speaking: Binding<Bool>
+    let listening: Binding<Bool>
     let registry: ProviderRegistry
 
     var body: some View {
@@ -13,7 +14,7 @@ struct SettingsView: View {
             ProvidersSection(settings: settings, registry: registry)
             ToneSection(settings: settings)
             VoicesSection(settings: settings, registry: registry)
-            BehaviourSection(settings: settings, speaking: speaking)
+            BehaviourSection(settings: settings, speaking: speaking, listening: listening)
             AdvancedSection(settings: settings)
         }
         .formStyle(.grouped)

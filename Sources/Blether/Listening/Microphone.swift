@@ -102,14 +102,13 @@ final class Microphone {
             let ratio = target.sampleRate / buffer.format.sampleRate
             let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
             guard let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
-            var consumed = false
+            let input = OneBuffer(buffer)
             var error: NSError?
             converter.convert(to: out, error: &error) { _, status in
-                if consumed {
+                guard let buffer = input.take() else {
                     status.pointee = .noDataNow
                     return nil
                 }
-                consumed = true
                 status.pointee = .haveData
                 return buffer
             }
@@ -117,6 +116,17 @@ final class Microphone {
             let samples = Array(UnsafeBufferPointer(start: data, count: Int(out.frameLength)))
             for chunk in chunker.append(samples) { onSamples(chunk) }
         }
+    }
+}
+
+/// Hands one input buffer to AVAudioConverter, then says "no more". The converter's input block is
+/// Sendable and AVAudioPCMBuffer is not; the block only runs synchronously inside `convert`, hence unchecked.
+private final class OneBuffer: @unchecked Sendable {
+    private var buffer: AVAudioPCMBuffer?
+    init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+    func take() -> AVAudioPCMBuffer? {
+        defer { buffer = nil }
+        return buffer
     }
 }
 

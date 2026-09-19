@@ -21,6 +21,9 @@ final class PlaybackQueue {
     private let makePlayer: @MainActor (URL) throws -> any Player
     private var pending: [AudioClip] = []
     private var current: (player: any Player, clip: AudioClip)?
+    /// Called once when that clip finishes playing. Not on stop, and not when it fails to start: the
+    /// ears must not open after a reply the user killed or never heard.
+    private var finishHandlers: [URL: @MainActor () -> Void] = [:]
 
     /// Bumped by `stop()`. A clip synthesised under an older generation is dropped on arrival.
     private(set) var generation = 0
@@ -31,12 +34,13 @@ final class PlaybackQueue {
         self.makePlayer = makePlayer
     }
 
-    func enqueue(_ clip: AudioClip, generation: Int? = nil) {
+    func enqueue(_ clip: AudioClip, generation: Int? = nil, onFinished: (@MainActor () -> Void)? = nil) {
         if let generation, generation != self.generation {
             Log.log("dropping clip synthesised before stop: \(clip.url.lastPathComponent)")
             remove(clip)
             return
         }
+        if let onFinished { finishHandlers[clip.url] = onFinished }
         pending.append(clip)
         if current == nil { playNext() }
     }
@@ -51,6 +55,7 @@ final class PlaybackQueue {
         current = nil
         pending.forEach(remove)
         pending.removeAll()
+        finishHandlers.removeAll()
     }
 
     private func playNext() {
@@ -75,11 +80,14 @@ final class PlaybackQueue {
     private func finished(_ clip: AudioClip) {
         guard current?.clip.url == clip.url else { return }
         current = nil
+        let handler = finishHandlers.removeValue(forKey: clip.url)
         remove(clip)
         playNext()
+        handler?()
     }
 
     private func remove(_ clip: AudioClip) {
+        finishHandlers.removeValue(forKey: clip.url)
         try? FileManager.default.removeItem(at: clip.url)
     }
 }
