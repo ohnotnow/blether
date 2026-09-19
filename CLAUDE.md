@@ -1,15 +1,20 @@
 # CLAUDE.md
 
 Hello. You are in blether, a macOS menubar app in Swift that speaks Claude
-CLI replies aloud. It is the successor to two Python projects, claude-speaks
-and claude-listens. As of 2026-09-18 slices 1 to 7 are built: the hook
-listener, a playback queue with a stop hotkey, one LLM that writes a
-persona preamble and compresses long replies, a settings window with a
-master on/off switch, Kokoro-82M on MLX run in a resident Python helper plus
-ElevenLabs, OpenAI, xAI and Mistral over their APIs, a provider per
-profile, remote mode, and an in-character quip on the Notification hook
-event, and tone: an optional mood classifier (Jev or the LLM) whose label
-Mistral and OpenAI voices express. Listening (slice 8) is still to come. README.md says what the app does; this file says how we
+CLI replies aloud and listens for the answer. It is the successor to two
+Python projects, claude-speaks and claude-listens. As of 2026-09-19 slices
+1 to 8 and 10 are built: the hook listener, a playback queue with a stop
+hotkey, one LLM that writes a persona preamble and compresses long replies,
+a settings window with a master on/off switch, Kokoro-82M on MLX run in a
+resident Python helper plus ElevenLabs, OpenAI, xAI and Mistral over their
+APIs, a provider per profile, remote mode, an in-character quip on the
+Notification hook event, tone (an optional mood classifier, Jev or the LLM,
+whose label Mistral and OpenAI voices express), and listening: after a
+reply the mic opens, Canary 180m flash transcribes on this Mac through the
+vendored transcribe.cpp Swift binding, and the words go into the right
+Claude Code session over the channels preview, served by blether itself.
+What is left is slice 9 (retire the Python repos), the menubar icon and the
+settings redesign. README.md says what the app does; this file says how we
 work on it.
 
 The thinking behind the design is written down in `ant`, so you do not have
@@ -44,13 +49,21 @@ to re-derive it or, worse, re-argue it.
    why there are no live-check scripts) and `blether-uqwCr` (tone, slice
    10: why the mood classifier survives, decided once and expressed per
    provider, reply clip only).
-9. The latest handover note (`ant list`, the newest "Handover" title). It
+9. The slice 8 ADR: `ant show blether-ZP9vQ`. Why the ears are Swift and
+   not Python, Canary through transcribe.cpp, the vendored package and its
+   two entitlements, the spike answers (hook `$PPID` is the Claude Code
+   process, a shell one-liner around nc is the whole channel server), the
+   empty-transcript finding (Canary gives nothing for long digital silence
+   at either end, so recordings are trimmed), the stop-skips-to-listening
+   decision, and what was rejected. Long, appended through the day; read
+   it top to bottom once.
+10. The latest handover note (`ant list`, the newest "Handover" title). It
    says where things stand and what is next.
-10. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
+11. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
    An informal notepad of macOS Swift gotchas from earlier projects, not
    rules. blether departs from it in one place: no App Sandbox (see the
    decisions table for why).
-11. Only if you need the history and have the sibling checkouts:
+12. Only if you need the history and have the sibling checkouts:
    `../claude-speaks` has `ant show cs-XKtxA` and `ant show cs-Ed6UZ` (the
    two conversations that shaped the rewrite), and `../claude-listens` has
    `TECHNICAL_OVERVIEW.md` for the channels wire contract.
@@ -86,6 +99,15 @@ named or the name is unknown. Not "source": that was the earlier sketch.
 Remote mode has no shared secret; blether is LAN-only (`ant show
 blether-csm6b`).
 
+The **ears** are the listening side: microphone, silence detector,
+recording, transcriber, and `Ears` itself, which owns the one recording
+that may be live. The **channel** is the Claude Code channels preview:
+blether is the MCP server, on 127.0.0.1:8766, and a shell one-liner around
+`nc` is how a session reaches it. A **session key** is the pair of session
+id and Claude Code pid that a Stop hook carries and a channel connection
+announces; it is how a transcript finds its session. "Listening" in the UI
+means the mic; "Listen on the network" is remote mode and unrelated.
+
 ## Layout
 
 - `Sources/Blether/`: `BletherApp.swift` wires everything at launch.
@@ -100,12 +122,40 @@ blether-csm6b`).
   at a time. The profile chooses the provider. The log is `~/Library/Logs/blether.log`. `Settings/` holds the
   UserDefaults-backed store (`AppSettings`) and the settings window, one
   file per section. `LLM/` is the chat-completions client.
+- `Sources/Blether/Listening/`: one file per idea. `AudioInputDevice` lists
+  mics through CoreAudio; `Microphone` captures through AVAudioEngine as
+  16 kHz mono chunks; `SilenceDetector` is pure and clocked by chunk count;
+  `Sounds` is the three cues; `Recording` is one attempt from arm to send
+  or cancel, trimmed to the speech; `ModelStore` fetches the model into
+  Application Support; `Transcriber` is an actor over the TranscribeCpp
+  Model and Session; `Ears` owns the live recording and the privacy gate
+  and hands text plus session key to a deliver closure; `SessionRegistry`
+  is the pure lookup (id, then pid, then the only connection);
+  `ChannelServer` is the second NWListener speaking JSON-RPC by hand.
+  `PlaybackQueue.enqueue(onFinished:)` is how a reply's last clip arms the
+  ears, and `stop()` fires that handler too.
+- `Packages/TranscribeCpp/`: the transcribe.cpp Swift binding, vendored from
+  their tag v0.2.3 with a Package.swift that points at the release
+  xcframework by URL and checksum. Their standalone SwiftPM mirror did not
+  exist on 2026-09-19; when it does, delete this directory and point
+  project.yml at it. The prebuilt framework is ad-hoc signed by its
+  authors, which is why `Sources/Blether/Blether.entitlements` disables
+  library validation (the hardened runtime stays on) and declares
+  audio-input; without both the app either fails to launch or never shows
+  the mic prompt. The usage string lives in project.yml, because
+  `Sources/Blether/Info.plist` is generated by xcodegen and hand edits to
+  it are lost.
+- `hooks/claude-code-settings.example.json`: the hook. The Stop hook carries
+  `?pid=$PPID`, which is the Claude Code process (verified 2026-09-19).
 - `Tests/BletherTests/`: XCTest, one file per source file, fakes under
   `Support/` (including `fake_helper.py`, so the suite never needs uv or
-  Kokoro). `make test` runs them; the build is warning-free under strict
-  concurrency and should stay so.
+  Kokoro, the mic, the model or the network; the channel tests use a real
+  loopback socket on port 0). `make test` runs them; the app build is
+  warning-free under strict concurrency and should stay so. The test
+  target has a handful of older concurrency warnings nobody has fixed.
 - `Blether.xcodeproj` is generated from `project.yml` by xcodegen and is
-  not tracked.
+  not tracked. Nor is `local.mk`, which may hold a code-signing identity so
+  every build is the same program to the keychain (README, "Build").
 
 ## An ant id quirk
 
@@ -142,6 +192,13 @@ sibling here. Always say which database when cross-referencing.
 - Before a commit, run the exposure sweep from `ant show blether-XKtxA`
   (it takes its patterns from git config so nothing is typed into a
   transcript) and make sure it prints nothing.
+- Relaunching blether closes every live channel; each session must `/mcp`
+  reconnect. Say so when you hand a build over for a listening check.
+- Writing to ait or ant: never `--description -` or `--body -` unless a real
+  heredoc follows; read an entry before replacing its body, prefer notes
+  over edits for anything the user may have written by hand, and read it
+  back after. On 2026-09-19 an empty stdin blanked a ticket carrying the
+  user's own notes; Time Machine got them back.
 
 ## Sibling repos
 

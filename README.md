@@ -27,12 +27,13 @@ character when Claude is waiting for you. An optional classifier reads the
 mood of each reply so Mistral and OpenAI voices can match it. A settings
 window covers the lot: the LLM endpoint, model and key, a key per provider,
 tone, your personas, profiles with a provider and a voice and persona per
-role, and switches for speaking, the preamble, the reply, notifications and
-listening on the network. A hook
-on another machine, or in one project, picks its profile by URL. No
-listening yet. A Claude Code Stop hook posts the reply to the app and you
-hear it, replies queue rather than talk over each other, and a hotkey stops
-everything.
+role, and switches for speaking, the preamble, the reply, notifications,
+listening after replies and listening on the network. A hook
+on another machine, or in one project, picks its profile by URL. A Claude
+Code Stop hook posts the reply to the app and you hear it, replies queue
+rather than talk over each other, and a hotkey stops everything. And it
+listens: when a reply finishes, the microphone opens, you answer out loud,
+and your words land in the Claude Code session that spoke.
 
 ## The LLM
 
@@ -130,7 +131,7 @@ Add this to `~/.claude/settings.json` (merge it if you already have a
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8765/hook",
+            "command": "curl -s -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- \"http://127.0.0.1:8765/hook?pid=$PPID\"",
             "async": true
           }
         ]
@@ -154,9 +155,14 @@ Add this to `~/.claude/settings.json` (merge it if you already have a
 
 Restart your Claude Code session and Claude should start speaking.
 
-Two details of that command line. `--data-binary @-` posts the payload
+Three details of that command line. `--data-binary @-` posts the payload
 Claude Code pipes to the hook on stdin, unchanged. `-m 5` gives curl five
 seconds, so if blether is not running a hook costs you at most that.
+`?pid=$PPID` on the Stop hook tells blether which Claude Code process the
+reply came from: the hook runs under `sh`, whose parent is Claude Code
+itself, so the shell fills it in. Listening uses it to find the right
+session when a resumed session's ids stop matching; if you never listen,
+leave it in anyway, it costs nothing.
 
 Claude Code normally waits for a hook to finish before handing the session
 back to you. `"async": true` tells it to fire the hook and move on. blether
@@ -279,12 +285,80 @@ the trade for a tool that stays this simple; see the note at the top. The
 claude-speaks `remote-hook.py` and its Hermes plugin keep working unchanged,
 because the token they send is ignored.
 
+## Listen after Claude replies
+
+Tick "Listening" in the menubar, or "Listen after Claude replies" in
+Settings > Behaviour. From then on, when a reply finishes playing you hear
+a tick, the microphone is open, and you talk. Two and a half seconds of
+quiet sends what you said (a pop), fifteen seconds with no speech gives up
+(a thud), and a single answer is capped at ninety seconds. Your words are
+transcribed on this Mac and arrive in the Claude Code session that spoke,
+as if you had typed them. Nothing leaves the machine.
+
+Off is the default, and off means the microphone never opens. The first
+time you turn it on, blether downloads the speech model,
+[Canary 180m flash](https://huggingface.co/nvidia/canary-180m-flash) as
+packaged by the [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp)
+authors (218 MB, into `~/Library/Application Support/blether/models`), and
+the menubar says so while it does. The first load on a machine takes about
+ten seconds while Metal compiles its kernels; after that the ears are ready
+in well under a second. macOS asks once for microphone permission, naming
+blether.
+
+The Microphone picker in Settings > Behaviour lists every input device, with
+"System default" first. Choose one and blether uses it whenever it listens;
+if it is not connected at the time, the system default is used and the
+menubar says so. English only for now.
+
+The preamble is skipped while listening is on, so the mic opens sooner. If
+two replies arrive back to back, the first one to finish gets the
+microphone and the other is logged and skipped. Claude is told, through the
+channel, to prefer plain questions over the AskUserQuestion dialog while
+you are talking, because a dialog blocks delivery until someone reaches the
+keyboard. You can also just say "go hands-free" or "stop listening" to
+Claude: the channel offers a `handsfree` tool that flips the same switch.
+
+## Install the channel
+
+Your words reach a session through Claude Code's channels research
+preview: an MCP server that can push text into a running session. blether
+is that server, on `127.0.0.1:8766`, and Claude Code reaches it through a
+one-line shell command that pipes the session to that port with `nc`.
+Register it once, for every project:
+
+```sh
+claude mcp add --scope user blether -- sh -c '( echo "blether $CLAUDE_CODE_SESSION_ID $PPID"; cat ) | nc 127.0.0.1 8766'
+```
+
+Then start each session you want to talk to with the channel flag:
+
+```sh
+claude --dangerously-load-development-channels server:blether
+```
+
+Claude Code shows a full-screen warning about development channels every
+launch (choose "I am using this for local development"), and asks once per
+project before using a new MCP server. The flag is not in `claude --help`
+while channels are in preview, but it works. `/mcp` in the session should
+list blether with its one tool. Some organisation accounts have channels
+switched off; if the flag is refused, that is why, and a personal account
+works.
+
+Two things to know. If you quit or relaunch blether, every session's pipe
+to it closes and Claude Code does not reopen it: run `/mcp` in each session
+and reconnect blether, or restart the session. And a session started without
+the flag still gets its replies spoken, but a spoken answer to it has
+nowhere to go: you hear the thud, and the log and menubar say which session
+had no channel.
+
 ## Stop talking
 
 Pick "Stop talking" from the menubar, or record a global shortcut under
 "Settings..." in the same menu. Stop kills the clip that is playing and
-drops everything queued behind it. The shortcut is remembered between
-launches.
+drops everything queued behind it. With listening on, stopping a reply skips
+straight to the microphone, so you can interrupt Claude and answer; if the
+microphone is already open, stop closes it without sending anything. The
+shortcut is remembered between launches.
 
 ## Turning it off
 
@@ -297,14 +371,24 @@ is playing when you turn it off stops at once.
 
 Two smaller switches live in the Behaviour section of Settings: "Preamble"
 drops the in-character line, and "Reply" drops the reply itself so you hear
-only the preamble. The fourth, "Listen on the network", is remote mode.
+only the preamble. "Listen after Claude replies" is the microphone, and
+"Listen on the network" is remote mode.
 
 ## Logs
 
 blether writes one line per event to `~/Library/Logs/blether.log`: each hook
 that arrives, what the LLM wrote, what Kokoro rendered and how long it took,
-and anything that failed. When the file passes 5 MB at launch it is renamed
-`blether.log.1` and a fresh one starts. Console.app shows it too.
+each recording (how long, how loud, how much was speech), what was
+transcribed and where it went, and anything that failed. When the file
+passes 5 MB at launch it is renamed `blether.log.1` and a fresh one starts.
+Console.app shows it too.
+
+If a recording transcribes to nothing, the log says "heard nothing worth
+sending" and the audio is kept at `~/Library/Logs/blether-last-empty.wav`
+so you can listen to what the model was given. The usual cause is a very
+quiet recording; the model also returns nothing for a clip that begins or
+ends with more than about a second of digital silence, which is why
+recordings are trimmed to the speech before transcription.
 
 ## How it works
 
@@ -324,11 +408,26 @@ then each request carries text, a voice id and a file path, and each reply
 says whether the WAV was written. That file is the reference for wiring a
 different local model to the same protocol.
 
+Listening is the same shape in reverse. When a reply's last clip finishes,
+or is stopped, the app opens the microphone through AVAudioEngine,
+converts whatever the device gives to 16 kHz mono, and watches the level:
+speech followed by 2.5 s of quiet ends the recording, which is trimmed to
+the speech and handed to Canary 180m flash through the vendored
+[transcribe.cpp](https://github.com/handy-computer/transcribe.cpp) Swift
+binding in `Packages/TranscribeCpp` (a prebuilt framework on Metal, one
+model kept warm). The text is written to the channel connection whose
+session id, or failing that Claude Code pid, matches the reply's hook, as a
+`notifications/claude/channel` message, and Claude Code shows it in that
+session as `<channel source="blether">`. The channel protocol itself, the
+MCP handshake and the `handsfree` tool, is a couple of hundred lines in
+`Sources/Blether/Listening/ChannelServer.swift`; there is no relay
+program, just `nc`.
+
 What blether keeps in `UserDefaults` (domain `uk.ohnotnow.blether`):
 `llmBaseURL`, `llmModel`, `llmExtraBody`, `personas`, `profiles`,
 `defaultProfileID`, `isEnabled`, `speaksPreamble`, `speaksMainReply`,
 `speaksNotifications`, `notificationLanguages`, `recentQuips`, `toneSource`,
-`listensOnLAN`, `uvPath`, and the two shortcuts under
+`listensOnLAN`, `listensAfterReply`, `microphoneID`, `uvPath`, and the two shortcuts under
 `KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. An
 older `roles` key is read once to seed the Default profile and never written
 again. The LLM key, the provider keys and the Jev key are in Keychain only, one
@@ -337,3 +436,10 @@ item each.
 ## Licence
 
 MIT. Copyright 2026 ohnotnow.
+
+`Packages/TranscribeCpp` is the Swift binding from
+[transcribe.cpp](https://github.com/handy-computer/transcribe.cpp), MIT,
+vendored with its licence files; its prebuilt framework is downloaded from
+their GitHub release at build time. The speech model,
+[Canary 180m flash](https://huggingface.co/nvidia/canary-180m-flash), is
+NVIDIA's, CC-BY-4.0, downloaded from Hugging Face on first use.
