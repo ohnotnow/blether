@@ -15,6 +15,8 @@ packages:
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
     from: 1.10.0
+  TranscribeCpp:
+    path: Packages/TranscribeCpp
 targets:
   Blether:
     type: application
@@ -25,6 +27,7 @@ targets:
         buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
+      - package: TranscribeCpp
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: uk.ohnotnow.blether
