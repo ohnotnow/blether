@@ -20,8 +20,15 @@ struct SilenceDetector {
     /// Nobody talks to Claude for longer than this in one go.
     static let maximumLength: TimeInterval = 90
 
+    /// Canary returns nothing at all for a clip that opens or closes with more than about a second of
+    /// digital silence (verified 2026-09-19 on a real recording, blether-ZP9vQ), so recordings are cut
+    /// to the speech plus this much either side.
+    static let margin: TimeInterval = 0.3
+
     let secondsPerChunk: TimeInterval
     private(set) var elapsed: TimeInterval = 0
+    /// The end of the first and last chunks that counted as speech.
+    private(set) var firstSpeechAt: TimeInterval?
     private(set) var lastSpeechAt: TimeInterval?
     private(set) var peakRMS: Float = 0
 
@@ -35,7 +42,10 @@ struct SilenceDetector {
         elapsed += secondsPerChunk
         let rms = Self.rms(chunk)
         peakRMS = max(peakRMS, rms)
-        if rms > Self.threshold { lastSpeechAt = elapsed }
+        if rms > Self.threshold {
+            lastSpeechAt = elapsed
+            if firstSpeechAt == nil { firstSpeechAt = elapsed }
+        }
         if elapsed >= Self.maximumLength {
             return heardSpeech ? .send : .cancel(reason: "no speech")
         }
@@ -43,6 +53,13 @@ struct SilenceDetector {
             return elapsed - lastSpeechAt >= Self.trailingSilence ? .send : .listening
         }
         return elapsed >= Self.noSpeechTimeout ? .cancel(reason: "no speech") : .listening
+    }
+
+    /// The part of the recording worth transcribing: from just before the first speech chunk to just
+    /// after the last, in seconds from the start. nil when no speech was heard.
+    var speechRange: ClosedRange<TimeInterval>? {
+        guard let firstSpeechAt, let lastSpeechAt else { return nil }
+        return max(0, firstSpeechAt - secondsPerChunk - Self.margin)...(lastSpeechAt + Self.margin)
     }
 
     static func rms(_ samples: [Float]) -> Float {

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import TranscribeCpp
 
@@ -54,7 +55,27 @@ actor Transcriber: Transcribing {
         let transcript = try run(loaded.session, pcm)
         let text = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
         Log.log("ears: \(String(format: "%.1f", Double(pcm.count) / Microphone.sampleRate)) s of audio in \(Int(Date().timeIntervalSince(started) * 1000)) ms: \(Log.preview(text))")
+        if text.isEmpty { Self.keepForInspection(pcm) }
         return text
+    }
+
+    /// An empty transcript for real audio is a bug somewhere; keep the samples next to the log so they
+    /// can be run through the model by hand. One file, overwritten each time.
+    static let lastEmptyRecording = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/blether-last-empty.wav")
+
+    private static func keepForInspection(_ pcm: [Float]) {
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Microphone.sampleRate, channels: 1, interleaved: false),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(pcm.count)) else { return }
+        buffer.frameLength = AVAudioFrameCount(pcm.count)
+        pcm.withUnsafeBufferPointer { buffer.floatChannelData![0].update(from: $0.baseAddress!, count: pcm.count) }
+        do {
+            try? FileManager.default.removeItem(at: lastEmptyRecording)
+            let file = try AVAudioFile(forWriting: lastEmptyRecording, settings: format.settings)
+            try file.write(from: buffer)
+            Log.log("ears: kept the audio at \(lastEmptyRecording.path)")
+        } catch {
+            Log.log("ears: could not keep the audio: \(error)")
+        }
     }
 
     /// Synchronous on purpose: the binding's async `run` would send the non-Sendable Session off this

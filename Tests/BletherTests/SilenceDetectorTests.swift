@@ -48,6 +48,24 @@ final class SilenceDetectorTests: XCTestCase {
         XCTAssertEqual(feed(speech, seconds: 1.5, into: &talker), .send)
     }
 
+    func testSpeechRangeCoversFirstToLastSpeechWithAMarginEitherSide() {
+        var detector = SilenceDetector()
+        XCTAssertNil(detector.speechRange)
+        _ = feed(quiet, seconds: 2, into: &detector)
+        _ = feed(speech, seconds: 1, into: &detector)
+        _ = feed(quiet, seconds: 3, into: &detector)
+        let range = detector.speechRange!
+        // 2 s of quiet is 63 chunks (2.016 s); the first speech chunk ends at 2.048 s and the 32nd at 3.04 s.
+        XCTAssertEqual(range.lowerBound, 2.048 - 0.032 - SilenceDetector.margin, accuracy: 0.001)
+        XCTAssertEqual(range.upperBound, 3.04 + SilenceDetector.margin, accuracy: 0.001)
+    }
+
+    func testSpeechRangeNeverStartsBeforeZero() {
+        var detector = SilenceDetector()
+        _ = feed(speech, seconds: 0.1, into: &detector)
+        XCTAssertEqual(detector.speechRange?.lowerBound, 0)
+    }
+
     func testQuietChunksBelowThresholdAreNotSpeech() {
         var detector = SilenceDetector()
         let hum = [Float](repeating: 0.005, count: Microphone.chunkSize)

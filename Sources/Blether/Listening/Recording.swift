@@ -68,6 +68,14 @@ final class Recording {
         finish(with: .cancel(reason: "stopped"))
     }
 
+    /// Cuts the silence off both ends; the model wants the words, not the room before and after them.
+    nonisolated static func trim(_ samples: [Float], to range: ClosedRange<TimeInterval>?) -> [Float] {
+        guard let range else { return samples }
+        let start = min(samples.count, Int(range.lowerBound * Microphone.sampleRate))
+        let end = min(samples.count, Int(range.upperBound * Microphone.sampleRate))
+        return Array(samples[start..<max(start, end)])
+    }
+
     private func finish(with verdict: SilenceDetector.Verdict) {
         guard !finished else { return }
         finished = true
@@ -80,9 +88,10 @@ final class Recording {
         let peak = String(format: "%.3f", detector.peakRMS)
         switch verdict {
         case .send:
-            Log.log("recording sent after \(seconds) s, peak RMS \(peak)")
+            let kept = Self.trim(samples, to: detector.speechRange)
+            Log.log("recording sent after \(seconds) s, peak RMS \(peak), kept \(String(format: "%.1f", Double(kept.count) / Microphone.sampleRate)) s of speech")
             sounds.play(.sent)
-            completion(.transcribe(samples))
+            completion(.transcribe(kept))
         case .cancel(let reason):
             Log.log("recording cancelled (\(reason)) after \(seconds) s, peak RMS \(peak)")
             sounds.play(.cancelled)

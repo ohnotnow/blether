@@ -21,8 +21,9 @@ final class PlaybackQueue {
     private let makePlayer: @MainActor (URL) throws -> any Player
     private var pending: [AudioClip] = []
     private var current: (player: any Player, clip: AudioClip)?
-    /// Called once when that clip finishes playing. Not on stop, and not when it fails to start: the
-    /// ears must not open after a reply the user killed or never heard.
+    /// Called once when that clip finishes playing, or when `stop()` kills it: the user's decision
+    /// (2026-09-19) is that stopping a reply skips straight to listening, as the old loop did. Not
+    /// called when a clip fails to start.
     private var finishHandlers: [URL: @MainActor () -> Void] = [:]
 
     /// Bumped by `stop()`. A clip synthesised under an older generation is dropped on arrival.
@@ -45,9 +46,11 @@ final class PlaybackQueue {
         if current == nil { playNext() }
     }
 
-    /// Kill the current clip and drop everything queued.
+    /// Kill the current clip and drop everything queued. The finish handler of the last queued clip
+    /// that has one still runs, so a stopped reply arms the ears just as a finished one would.
     func stop() {
         generation += 1
+        let skippedTo = ([current?.clip].compactMap { $0 } + pending).last { finishHandlers[$0.url] != nil }.flatMap { finishHandlers[$0.url] }
         if let current {
             current.player.stop()
             remove(current.clip)
@@ -56,6 +59,7 @@ final class PlaybackQueue {
         pending.forEach(remove)
         pending.removeAll()
         finishHandlers.removeAll()
+        skippedTo?()
     }
 
     private func playNext() {

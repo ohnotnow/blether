@@ -9,6 +9,7 @@ struct BletherApp: App {
     private let queue: PlaybackQueue
     private let pipeline: SpeechPipeline
     private let hookServer: HookServer?
+    private let channelServer: ChannelServer?
     private let registry: ProviderRegistry
     private let ears: Ears
 
@@ -18,12 +19,23 @@ struct BletherApp: App {
         let settings = AppSettings()
         let queue = PlaybackQueue()
         let registry = Self.makeRegistry(settings: settings, state: state)
-        let ears = Self.makeEars(settings: settings, state: state)
+        let channel = ChannelServer { action, reply in
+            Task { @MainActor in reply(Self.handsfree(action, settings: settings, state: state)) }
+        }
+        let ears = Self.makeEars(settings: settings, state: state, channel: channel)
         let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings, ears: ears) { settings in
             ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
         }
         var server: HookServer?
+        var channelServer: ChannelServer?
         if !AppRuntime.isRunningUnitTests {
+            do {
+                try channel.start()
+                channelServer = channel
+            } catch {
+                Log.log("channel listener failed on port \(ChannelServer.defaultPort): \(error)")
+                state.channelError = "Channel failed: \(error)"
+            }
             server = HookServer(allInterfaces: settings.listensOnLAN) { event, profile in
                 Task {
                     switch event {
@@ -38,9 +50,9 @@ struct BletherApp: App {
                 Log.log("hook listener failed on port \(HookServer.defaultPort): \(error)")
                 state.listenerError = "Listener failed: \(error)"
             }
+            // Stop while listening closes the mic; stop while talking skips to listening (the queue arms).
             KeyboardShortcuts.onKeyUp(for: .stopTalking) {
-                queue.stop()
-                ears.cancel()
+                if ears.isListening { ears.cancel() } else { queue.stop() }
             }
             KeyboardShortcuts.onKeyUp(for: .toggleSpeaking) {
                 setSpeaking(!settings.isEnabled, settings: settings, queue: queue)
@@ -62,6 +74,7 @@ struct BletherApp: App {
         self.queue = queue
         self.pipeline = pipeline
         hookServer = server
+        self.channelServer = channelServer
         _appState = State(initialValue: state)
     }
 
@@ -113,16 +126,36 @@ struct BletherApp: App {
         })
     }
 
-    /// Microphone, transcriber and sounds, with the status line going to the menubar. Transcripts go
-    /// nowhere until the channel server (blether-UkLWZ.8.7) provides `deliver`.
+    /// Microphone, transcriber and sounds, with the status line going to the menubar. A transcript goes
+    /// down the channel to the session that armed the mic; if that session has no channel, it is said, not lost.
     @MainActor
-    private static func makeEars(settings: AppSettings, state: AppState) -> Ears {
+    private static func makeEars(settings: AppSettings, state: AppState, channel: ChannelServer) -> Ears {
         let transcriber = Transcriber(store: ModelStore()) { line in
             Task { @MainActor in state.listeningStatus = line }
         }
         return Ears(settings: settings, microphone: Microphone(), transcriber: transcriber, sounds: SystemSounds(),
                     status: { state.listeningStatus = $0 },
-                    deliver: { text, session in Log.log("heard for \(session.id ?? "?"): \(Log.preview(text)) (no channel yet)") })
+                    deliver: { text, session in
+                        if !channel.deliver(text, to: session) {
+                            Log.log("heard \(Log.preview(text)) but session \(session.id ?? "?") has no channel; is it running with the channel flag?")
+                            state.listeningStatus = "Heard you, but that session has no channel"
+                            SystemSounds().play(.cancelled)
+                        }
+                    })
+    }
+
+    /// The `handsfree` tool Claude can call from a session: flips the same setting as the toggles.
+    @MainActor
+    private static func handsfree(_ action: String, settings: AppSettings, state: AppState) -> String {
+        switch action {
+        case "on": settings.listensAfterReply = true
+        case "off": settings.listensAfterReply = false
+        default: break
+        }
+        let ears = settings.listensAfterReply ? "Listening after replies is on." : "Listening after replies is off."
+        let model = ModelStore().isPresent ? "" : " The speech model is not downloaded yet; the first listen will fetch it (218 MB)."
+        let status = state.listeningStatus.map { " Status: \($0)." } ?? ""
+        return ears + model + status
     }
 
     var body: some Scene {
@@ -139,10 +172,14 @@ struct BletherApp: App {
                 Button(status) {}.disabled(true)
                 Divider()
             }
+            if let error = appState.channelError {
+                Button(error) {}.disabled(true)
+                Divider()
+            }
             Toggle("Speaking", isOn: speaking)
             Toggle("Listening", isOn: listening)
             Button("Stop talking") {
-                queue.stop()
+                if ears.isListening { ears.cancel() } else { queue.stop() }
             }
             Divider()
             Button("Settings...") {

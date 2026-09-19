@@ -90,13 +90,22 @@ final class PlaybackQueueTests: XCTestCase {
         XCTAssertFalse(queue.isPlaying)
     }
 
-    func testOnFinishedDoesNotFireWhenStopKillsTheClip() {
-        var fired = 0
-        queue.enqueue(makeTestClip(), onFinished: { fired += 1 })
-        queue.enqueue(makeTestClip(), onFinished: { fired += 1 })
+    /// The user's decision (2026-09-19): stopping a reply skips to listening rather than cancelling it.
+    func testStopFiresTheLastFinishHandlerOnceAndDropsTheOthers() {
+        var fired: [String] = []
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("first reply") })
+        queue.enqueue(makeTestClip())
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("second reply") })
         queue.stop()
+        XCTAssertEqual(fired, ["second reply"], "the most recent reply gets the mic; the earlier one loses")
         players[0].finish()
-        XCTAssertEqual(fired, 0, "a reply the user killed must not open the ears")
+        XCTAssertEqual(fired, ["second reply"], "and the killed player finishing later changes nothing")
+    }
+
+    func testStopWithNoHandlersFiresNothing() {
+        queue.enqueue(makeTestClip())
+        queue.stop()
+        XCTAssertFalse(queue.isPlaying)
     }
 
     func testStopKillsCurrentAndDropsTheRest() {

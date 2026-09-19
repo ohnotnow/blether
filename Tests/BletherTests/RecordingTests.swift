@@ -66,11 +66,32 @@ final class RecordingTests: XCTestCase {
         mic.hear(speech, seconds: 1)
         mic.hear(quiet, seconds: 3)
         guard case .transcribe(let samples) = await outcome() else { return XCTFail("expected a transcript") }
-        // 32 chunks of speech (one second rounds up), then quiet until 2.5 s past the last speech chunk: 79 more.
-        XCTAssertEqual(samples.count, Microphone.chunkSize * (32 + 79), "every chunk up to and including the one that sent")
+        // 32 chunks of speech (one second rounds up) end at 1.024 s; the trailing quiet is cut to the margin.
+        XCTAssertEqual(samples.count, Int((1.024 + SilenceDetector.margin) * Microphone.sampleRate), "speech plus the margin, not the whole 2.5 s of quiet")
         XCTAssertEqual(sounds.played, [.armed, .sent])
         XCTAssertEqual(mic.stopped, 1)
         withExtendedLifetime(recording) {}
+    }
+
+    @MainActor func testLeadingSilenceIsCutOffBeforeTranscription() async throws {
+        let mic = FakeMicrophone()
+        let sounds = FakeSounds()
+        let (recording, outcome) = makeRecording(mic: mic, sounds: sounds)
+        _ = try recording.start()
+        mic.hear(quiet, seconds: 2)
+        mic.hear(speech, seconds: 1)
+        mic.hear(quiet, seconds: 3)
+        guard case .transcribe(let samples) = await outcome() else { return XCTFail("expected a transcript") }
+        let start = 2.048 - 0.032 - SilenceDetector.margin
+        let end = 3.04 + SilenceDetector.margin
+        XCTAssertEqual(samples.count, Int(end * Microphone.sampleRate) - Int(start * Microphone.sampleRate))
+        XCTAssertEqual(samples.first, 0, "the margin before the first word is quiet")
+        XCTAssertTrue(samples[Int(0.4 * Microphone.sampleRate)] == 0.1, "and the speech is inside")
+        withExtendedLifetime(recording) {}
+    }
+
+    func testTrimWithNoRangeKeepsEverything() {
+        XCTAssertEqual(Recording.trim([1, 2, 3], to: nil), [1, 2, 3])
     }
 
     @MainActor func testNoSpeechCancelsWithTheCancelledCue() async throws {

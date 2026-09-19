@@ -8,4 +8,6 @@ final class AppState {
     var providerStatus: String?
     /// One line about the ears (model download, a missing microphone), shown in the menubar; nil when quiet.
     var listeningStatus: String?
+    /// Set once at launch if the channel listener could not bind; cleared only by relaunch.
+    var channelError: String?
 }
