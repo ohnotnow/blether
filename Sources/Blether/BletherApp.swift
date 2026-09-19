@@ -38,6 +38,7 @@ struct BletherApp: App {
             }
             KeyboardShortcuts.onKeyUp(for: .stopTalking) {
                 queue.stop()
+                // TODO(blether-UkLWZ.8.6): also cancel a live Recording through Ears once it exists.
             }
             KeyboardShortcuts.onKeyUp(for: .toggleSpeaking) {
                 setSpeaking(!settings.isEnabled, settings: settings, queue: queue)
@@ -108,7 +109,12 @@ struct BletherApp: App {
                 Button(status) {}.disabled(true)
                 Divider()
             }
+            if let status = appState.listeningStatus {
+                Button(status) {}.disabled(true)
+                Divider()
+            }
             Toggle("Speaking", isOn: speaking)
+            Toggle("Listening", isOn: $settings.listensAfterReply)
             Button("Stop talking") {
                 queue.stop()
             }

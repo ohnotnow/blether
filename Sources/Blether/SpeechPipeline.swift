@@ -48,8 +48,8 @@ final class SpeechPipeline: Sendable {
             let llm = makeLLM(settings)
             return Snapshot(
                 generation: queue.generation,
-                // Playback rule 4: no preamble when the reply will queue behind audio already playing.
-                preambleSkipReason: !settings.speaksPreamble ? "preamble is off" : queue.isPlaying ? "audio already playing" : nil,
+                // Playback rule 3: no preamble while listening is on. Rule 4: none when the reply will queue behind audio already playing.
+                preambleSkipReason: !settings.speaksPreamble ? "preamble is off" : settings.listensAfterReply ? "listening is on" : queue.isPlaying ? "audio already playing" : nil,
                 speaksMainReply: settings.speaksMainReply,
                 monologuePersona: settings.persona(for: .monologue, in: profile),
                 mainPersona: settings.persona(for: .main, in: profile),

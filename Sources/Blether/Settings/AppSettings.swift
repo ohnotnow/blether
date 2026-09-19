@@ -36,6 +36,8 @@ final class AppSettings {
         static let uvPath = "uvPath"
         static let listensOnLAN = "listensOnLAN"
         static let toneSource = "toneSource"
+        static let microphoneID = "microphoneID"
+        static let listensAfterReply = "listensAfterReply"
     }
     private static let llmKeyAccount = "llm"
 
@@ -213,6 +215,23 @@ final class AppSettings {
     var toneSource: ToneSource {
         get { _ = revision; return defaults.string(forKey: Key.toneSource).flatMap(ToneSource.init(rawValue:)) ?? .off }
         set { defaults.set(newValue.rawValue, forKey: Key.toneSource); revision += 1 }
+    }
+
+    /// Open the microphone when a reply finishes and send what is said to that Claude Code session.
+    /// The privacy gate: off by default, and checked at arm time, never cached (blether-UkLWZ.8).
+    var listensAfterReply: Bool {
+        get { _ = revision; return defaults.bool(forKey: Key.listensAfterReply) }
+        set { defaults.set(newValue, forKey: Key.listensAfterReply); revision += 1 }
+    }
+
+    /// The CoreAudio UID of the microphone to listen with. nil is the system default. If the device is
+    /// not connected when the ears arm, the default is used and the log says so (blether-ZP9vQ).
+    var microphoneID: String? {
+        get { _ = revision; return defaults.string(forKey: Key.microphoneID) }
+        set {
+            if let newValue, !newValue.isEmpty { defaults.set(newValue, forKey: Key.microphoneID) } else { defaults.removeObject(forKey: Key.microphoneID) }
+            revision += 1
+        }
     }
 
     /// Where `uv` lives, when it is not in one of the usual places. Empty means look for it.

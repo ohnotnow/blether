@@ -46,6 +46,24 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(settings.uvPath, "/somewhere/uv")
     }
 
+    @MainActor func testListenAfterReplyDefaultsOffAndRoundTrips() {
+        let settings = settings
+        XCTAssertFalse(settings.listensAfterReply, "the privacy gate is closed until opened")
+        settings.listensAfterReply = true
+        XCTAssertTrue(settings.listensAfterReply)
+    }
+
+    @MainActor func testMicrophoneIDDefaultsToSystemDefaultAndRoundTrips() {
+        let settings = settings
+        XCTAssertNil(settings.microphoneID)
+        settings.microphoneID = "USB-1234"
+        XCTAssertEqual(settings.microphoneID, "USB-1234")
+        settings.microphoneID = nil
+        XCTAssertNil(settings.microphoneID)
+        settings.microphoneID = ""
+        XCTAssertNil(settings.microphoneID, "an empty id is the system default, not a device called nothing")
+    }
+
     @MainActor func testListenOnNetworkDefaultsOffAndRoundTrips() {
         XCTAssertFalse(settings.listensOnLAN)
         settings.listensOnLAN = true

@@ -145,6 +145,14 @@ final class SpeechPipelineTests: XCTestCase {
         XCTAssertEqual(makeLLMCalls, 0, "the snapshot must not be built for a dropped reply")
     }
 
+    /// Playback rule 3 (blether-VYQvH): the preamble is a delay before the mic opens, so listening skips it.
+    func testListeningOnSkipsThePreamble() async {
+        settings.listensAfterReply = true
+        await pipeline().speak(long)
+        XCTAssertEqual(llm.preambleCalls, 0)
+        XCTAssertEqual(provider.calls.map(\.voice), ["v-main"])
+    }
+
     func testPreambleOffPlaysOnlyTheReply() async {
         settings.speaksPreamble = false
         await pipeline().speak(long)
