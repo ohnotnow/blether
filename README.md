@@ -43,13 +43,19 @@ this Mac at `http://127.0.0.1:11434/v1` with the model `maternion/minicpm5:2b`,
 so nothing is spent and no key is needed. If Ollama is not running you still
 hear the reply, prefixed with a heads-up that the LLM fell over.
 
-To point it elsewhere, open "Settings..." from the menubar and change the
-base URL and model in the LLM section. If the endpoint needs an API key,
-paste it there too: it goes into your macOS Keychain and is sent only to that
-endpoint. Changes take effect on the next reply.
+To point it elsewhere, open "Settings..." from the menubar and go to the LLM
+page. It offers Anthropic (through their OpenAI-compatible endpoint), OpenAI,
+xAI and Mistral with the address filled in and a model suggested, plus
+"OpenAI compatible" for Ollama, LM Studio, OpenRouter and anything else with
+a base URL. Pick one to edit it, paste its key if it needs one (into your
+macOS Keychain, sent only to that service; OpenAI, xAI and Mistral share the
+key you gave them as speech providers), then switch on "Use this provider".
+Looking at a provider does not switch to it. Until some LLM has answered
+once, the LLM page wears a "Set up" badge and the menubar says replies are
+being read raw. Changes take effect on the next reply.
 
-Some endpoints take fields that are not standard OpenAI. The Advanced fold at
-the bottom of the settings window holds an extra request body, a JSON object
+Some endpoints take fields that are not standard OpenAI. The Advanced group
+on the LLM page holds an extra request body, a JSON object
 merged into every request (it cannot replace the model or the messages).
 With Ollama and a reasoning model this one is worth having, otherwise a
 40-word summary can take a minute of hidden thinking:
@@ -77,8 +83,8 @@ stays warm, so a reply is spoken within a second of the words being ready.
 It uses about 670 MB of memory while blether runs and is gone when you quit.
 
 Voices are Kokoro's own, grouped by language in Settings. If blether cannot
-find uv, the menubar says so and Settings > Advanced has a field for its
-path.
+find uv, the menubar says so and Settings > Listening has a field for its
+path, with a Restart button beside it.
 
 ## Build
 
@@ -173,10 +179,10 @@ your way.
 The `Notification` entry is optional. Claude Code fires it when Claude is
 waiting for you, a permission prompt or an idle session, and blether answers
 with one short line in character, in a language picked at random from the
-list in Settings > Behaviour. The last ten lines are fed back to the LLM so
+list in Settings > General. The last ten lines are fed back to the LLM so
 it does not repeat itself. If something is already playing the line is
 dropped rather than queued, and if the LLM fails you hear a beep instead.
-Leave the entry out, or turn Notifications off in Settings > Behaviour, and
+Leave the entry out, or turn Notifications off in Settings > General, and
 those events are ignored.
 
 The language list is one language per line with a weight after a space, such
@@ -189,8 +195,8 @@ is read as if it were English.
 ## Voices and personas
 
 A persona is a name and a one-line character description that slots into
-"in the voice of...". Marvin ships as the default and you can add your own in
-the Profiles, voices and personas section of the settings window. Each role,
+"in the voice of...". Marvin ships as the default and you can add your own on
+the Personas page of the settings window. Each role,
 the preamble, the reply and the notification, gets a persona (or none) and a
 voice from the profile's provider, grouped by language where the provider
 says which language a voice is.
@@ -198,10 +204,16 @@ says which language a voice is.
 ## Profiles
 
 A profile is a name plus a voice and persona for each role. A fresh install
-has one, called Default. Add more in the Profiles, voices and personas
-section of Settings: pick the profile you are editing, rename it, and choose
-its voices and personas below. One profile is marked as the default and is
-used whenever a hook names no profile, or names one that does not exist.
+has one, called Default. Add more on the Profiles page of Settings: pick the
+profile you are editing, rename it, and choose its voices and personas
+below. Names must be unique, since hooks find profiles by name. Every voice
+row has a Play button that speaks a short sample in that voice, kept on disk
+under Application Support so an API voice is billed once, and a Voice id
+field for ids the provider's list does not carry. Switching a profile's
+provider remembers the voices it had, so switching back restores them. One
+profile is marked as the default and is used whenever a hook names no
+profile, or names one that does not exist; the menubar menu has a "Default
+profile" submenu for changing it without opening Settings.
 
 A hook picks a profile with `?profile=<name>` on the hook URL. Per project,
 per agent and per machine are all just different URLs. For one project, put
@@ -235,9 +247,9 @@ under each profile.
 
 A provider is a speech service. Five are built in: Kokoro, which runs on
 this Mac for free, and ElevenLabs, OpenAI, xAI and Mistral, which need an
-account and a key. Paste each key in Settings > Providers; it goes into your
-macOS Keychain and is sent only to that service. Then pick the provider on
-each profile in the Profiles section, so the Pi's Hermes can speak through
+account and a key. Paste each key in Settings > TTS Providers; it goes into
+your macOS Keychain and is sent only to that service. Then pick the provider
+on each profile on the Profiles page, so the Pi's Hermes can speak through
 xAI while your local Claude uses ElevenLabs and a third profile stays on
 Kokoro.
 
@@ -261,7 +273,7 @@ of the voice, OpenAI by a delivery instruction. Kokoro, ElevenLabs and xAI
 sound the same either way. The preamble and the notification line are
 not affected; Marvin is always Marvin.
 
-Settings > Tone has three choices. "Jev" is a small classification model
+The Tone group on the LLM page has three choices. "Jev" is a small classification model
 from Typesafe built for exactly this kind of question; it needs its own
 key, pasted in the row that appears when you pick it. "Your LLM" asks the
 model you already configured, which works but adds a second call per
@@ -272,7 +284,7 @@ says why; you will not hear about it.
 
 Claude Code on another machine can send its replies here to be spoken, each
 with its own profile, so you hear which Claude is asking. Tick "Listen on
-the network" in Settings > Behaviour and relaunch blether. macOS may ask
+the network" in Settings > General and press Restart. macOS may ask
 once whether blether may accept incoming connections. On the other machine
 install the same curl hook, pointed at this Mac and naming a profile:
 
@@ -288,9 +300,11 @@ because the token they send is ignored.
 ## Listen after Claude replies
 
 Tick "Listening" in the menubar, or "Listen after Claude replies" in
-Settings > Behaviour. From then on, when a reply finishes playing you hear
+Settings > General. From then on, when a reply finishes playing you hear
 a tick, the microphone is open, and you talk. Two and a half seconds of
-quiet sends what you said (a pop), fifteen seconds with no speech gives up
+quiet sends what you said (a pop; the "Pause before sending" slider in
+Settings > Listening moves this between one and six seconds), fifteen
+seconds with no speech gives up
 (a thud), and a single answer is capped at ninety seconds. Your words are
 transcribed on this Mac and arrive in the Claude Code session that spoke,
 as if you had typed them. Nothing leaves the machine.
@@ -305,7 +319,7 @@ ten seconds while Metal compiles its kernels; after that the ears are ready
 in well under a second. macOS asks once for microphone permission, naming
 blether.
 
-The Microphone picker in Settings > Behaviour lists every input device, with
+The Microphone picker in Settings > Listening lists every input device, with
 "System default" first. Choose one and blether uses it whenever it listens;
 if it is not connected at the time, the system default is used and the
 menubar says so. English only for now.
@@ -366,10 +380,10 @@ When you are deep in a terminal discussion, hearing three seconds of every
 reply and then stopping it is worse than silence. Untick "Speaking" in the
 menubar, or record a "Toggle speaking" shortcut in Settings. Off means a
 reply is dropped before any LLM call or speech work, so nothing is spent,
-and the menubar speaker gains a slash so the silence is explained. Whatever
+and the menubar robot's eyes and mouth close so the silence is explained. Whatever
 is playing when you turn it off stops at once.
 
-Two smaller switches live in the Behaviour section of Settings: "Preamble"
+Two smaller switches live on the General page of Settings: "Preamble"
 drops the in-character line, and "Reply" drops the reply itself so you hear
 only the preamble. "Listen after Claude replies" is the microphone, and
 "Listen on the network" is remote mode.
@@ -377,11 +391,14 @@ only the preamble. "Listen after Claude replies" is the microphone, and
 ## Logs
 
 blether writes one line per event to `~/Library/Logs/blether.log`: each hook
-that arrives, what the LLM wrote, what Kokoro rendered and how long it took,
-each recording (how long, how loud, how much was speech), what was
-transcribed and where it went, and anything that failed. When the file
-passes 5 MB at launch it is renamed `blether.log.1` and a fresh one starts.
-Console.app shows it too.
+that arrives, each LLM call and how long it took, what Kokoro rendered,
+each recording (how long, how loud, how much was speech), where a transcript
+went, and anything that failed. The words themselves, what Claude said,
+what the LLM wrote and what you said, are not logged unless you switch on
+"Log the words too" on the General page; off, the line shows a character
+count instead. The same page shows the log's path with "Open in Finder" and
+"Clear" buttons. When the file passes 5 MB at launch it is renamed
+`blether.log.1` and a fresh one starts. Console.app shows it too.
 
 If a recording transcribes to nothing, the log says "heard nothing worth
 sending" and the audio is kept at `~/Library/Logs/blether-last-empty.wav`

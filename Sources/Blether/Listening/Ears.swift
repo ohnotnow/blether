@@ -67,7 +67,7 @@ final class Ears: EarsArming {
             Log.log("listening switched off while the ears were getting ready")
             return
         }
-        let recording = Recording(microphone: microphone, sounds: sounds, deviceID: settings.microphoneID) { [weak self] outcome in
+        let recording = Recording(microphone: microphone, sounds: sounds, deviceID: settings.microphoneID, trailingSilence: settings.trailingSilence) { [weak self] outcome in
             self?.finished(outcome, for: session)
         }
         do {

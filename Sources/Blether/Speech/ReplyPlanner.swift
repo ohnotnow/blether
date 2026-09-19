@@ -71,7 +71,7 @@ struct ReplyPlanner: Sendable {
                 Log.log("preamble: model returned empty content, no preamble")
                 return .success(nil)
             }
-            Log.log("preamble: \(line)")
+            Log.log("preamble: \(Log.content(line))")
             return .success(line)
         } catch {
             Log.log("preamble error: \(error)")

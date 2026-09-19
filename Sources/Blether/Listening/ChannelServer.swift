@@ -116,7 +116,7 @@ final class ChannelServer: @unchecked Sendable {
             guard let id = registry.lookup(key), let connection = connections[id] else { return false }
             let params: [String: Any] = ["content": text]
             send(["jsonrpc": "2.0", "method": "notifications/claude/channel", "params": params], on: connection)
-            Log.log("channel: delivered to \(connection.label): \(Log.preview(text))")
+            Log.log("channel: delivered to \(connection.label): \(Log.content(text))")
             return true
         }
     }

@@ -18,7 +18,7 @@ struct ProvidersSection: View {
         } header: {
             Text("Providers")
         } footer: {
-            Text("Keys stay in your macOS Keychain and are sent only to that service. Kokoro runs locally and needs none. Each profile below picks which provider speaks it.")
+            Text("Keys stay in your macOS Keychain and are sent only to that service. Kokoro runs locally and needs none. Each profile picks which provider speaks it.")
         }
     }
 }

@@ -20,6 +20,13 @@ final class SilenceDetectorTests: XCTestCase {
         XCTAssertFalse(detector.heardSpeech)
     }
 
+    func testTrailingSilenceIsAdjustable() {
+        var detector = SilenceDetector(trailingSilence: 1.0)
+        XCTAssertEqual(feed(speech, seconds: 1, into: &detector), .listening)
+        XCTAssertEqual(feed(quiet, seconds: 0.5, into: &detector), .listening)
+        XCTAssertEqual(feed(quiet, seconds: 0.6, into: &detector), .send)
+    }
+
     func testSpeechThenTrailingSilenceSends() {
         var detector = SilenceDetector()
         XCTAssertEqual(feed(speech, seconds: 1, into: &detector), .listening)

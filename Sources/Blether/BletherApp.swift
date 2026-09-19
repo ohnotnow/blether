@@ -17,6 +17,7 @@ struct BletherApp: App {
         if !AppRuntime.isRunningUnitTests { Log.rotateIfLarge() }
         let state = AppState()
         let settings = AppSettings()
+        Log.logsContent.withLock { $0 = settings.logsContent }
         let queue = PlaybackQueue()
         let registry = Self.makeRegistry(settings: settings, state: state)
         let channel = ChannelServer { action, reply in
@@ -24,7 +25,9 @@ struct BletherApp: App {
         }
         let ears = Self.makeEars(settings: settings, state: state, channel: channel)
         let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings, ears: ears) { settings in
-            ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
+            let client = ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
+            guard !settings.llmHasAnswered else { return client }
+            return FirstAnswerLLM(wrapped: client) { Task { @MainActor in settings.llmHasAnswered = true } }
         }
         var server: HookServer?
         var channelServer: ChannelServer?
@@ -137,7 +140,7 @@ struct BletherApp: App {
                     status: { state.listeningStatus = $0 },
                     deliver: { text, session in
                         if !channel.deliver(text, to: session) {
-                            Log.log("heard \(Log.preview(text)) but session \(session.id ?? "?") has no channel; is it running with the channel flag?")
+                            Log.log("heard \(Log.content(text)) but session \(session.id ?? "?") has no channel; is it running with the channel flag?")
                             state.listeningStatus = "Heard you, but that session has no channel"
                             SystemSounds().play(.cancelled)
                         }
@@ -159,25 +162,29 @@ struct BletherApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("blether", systemImage: MenuBarIcon.name(enabled: settings.isEnabled), isInserted: .constant(!AppRuntime.isRunningUnitTests)) {
-            if let error = appState.listenerError {
-                Button(error) {}.disabled(true)
-                Divider()
-            }
-            if let status = appState.providerStatus {
-                Button(status) {}.disabled(true)
-                Divider()
-            }
-            if let status = appState.listeningStatus {
-                Button(status) {}.disabled(true)
-                Divider()
-            }
-            if let error = appState.channelError {
-                Button(error) {}.disabled(true)
+        MenuBarExtra(isInserted: .constant(!AppRuntime.isRunningUnitTests)) {
+            // Above the switches, unlike the status lines below Quit: it goes away once, on the first
+            // answered reply, never while the menu is open.
+            if !settings.llmHasAnswered {
+                Button("No LLM has answered yet, so replies are read raw. Pick one in Settings, LLM.") {
+                    NSApp.activate(ignoringOtherApps: true)
+                    openSettings()
+                }
                 Divider()
             }
             Toggle("Speaking", isOn: speaking)
             Toggle("Listening", isOn: listening)
+            // "Default profile", not "Profile": blether has no current profile. A hook that names one
+            // with ?profile= still gets that one; this changes only what an unnamed hook gets
+            // (decided with the user 2026-09-19, ant blether-bREz9).
+            if settings.profiles.count > 1 {
+                Picker("Default profile", selection: Binding(get: { settings.defaultProfileID }, set: { settings.defaultProfileID = $0 })) {
+                    ForEach(settings.profiles) { profile in
+                        Text(profile.name).tag(profile.id)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
             Button("Stop talking") {
                 if ears.isListening { ears.cancel() } else { queue.stop() }
             }
@@ -191,6 +198,18 @@ struct BletherApp: App {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")
+            // Status lines live below Quit, in a dead-end after a divider, so a line vanishing (Kokoro
+            // warming up, say) cannot shift the items above it under a moving mouse. The user clicked
+            // Quit instead of Settings twice that way (2026-09-19).
+            let status = [appState.listenerError, appState.providerStatus, appState.listeningStatus, appState.channelError].compactMap { $0 }
+            if !status.isEmpty {
+                Divider()
+                ForEach(status, id: \.self) { line in
+                    Button(line) {}.disabled(true)
+                }
+            }
+        } label: {
+            Image(nsImage: MenuBarIcon.image(enabled: settings.isEnabled))
         }
         Settings {
             SettingsView(settings: settings, speaking: speaking, listening: listening, registry: registry)

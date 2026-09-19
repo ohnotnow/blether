@@ -14,7 +14,7 @@ final class QuipPlannerTests: XCTestCase {
         XCTAssertTrue(system.contains(Persona.marvin.description), system)
         XCTAssertTrue(system.contains("Reply in French."), system)
         XCTAssertTrue(system.contains("- Oh no.\n- Typical."), system)
-        XCTAssertEqual(llm.calls[0].user, "")
+        XCTAssertEqual(llm.calls[0].user, Prompts.notificationUser, "never empty: Anthropic refuses an empty user turn")
     }
 
     func testNoHistoryAndNoPersonaStillQuip() async {

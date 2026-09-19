@@ -73,6 +73,9 @@ enum Prompts {
     /// The notification role: the line spoken when Claude is waiting for the user. Ported from
     /// claude-speaks' prompts/openai/notification.md. `persona` is a description, not a Persona,
     /// so a missing one can be replaced by a plain phrase.
+    /// The user turn for the quip: every provider wants one, and Anthropic refuses an empty one.
+    static let notificationUser = "The user has stepped away again. Your line, please."
+
     static func notification(persona: String, language: String, history: [String]) -> String {
         let recent = history.isEmpty ? "(no recent history)" : history.map { "- " + $0 }.joined(separator: "\n")
         return """

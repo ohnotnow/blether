@@ -201,7 +201,7 @@ final class HookServer: @unchecked Sendable {
                 return
             }
             let session = SessionKey(id: payload.sessionId, pid: request.query["pid"].flatMap { Int32($0) })
-            Log.log("hook Stop\(label): \(Log.preview(text))")
+            Log.log("hook Stop\(label): \(Log.content(text))")
             onEvent(.stop(text: text, session: session), profile)
         case "Notification":
             Log.log("hook Notification\(label)")

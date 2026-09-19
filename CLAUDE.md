@@ -13,8 +13,10 @@ whose label Mistral and OpenAI voices express), and listening: after a
 reply the mic opens, Canary 180m flash transcribes on this Mac through the
 vendored transcribe.cpp Swift binding, and the words go into the right
 Claude Code session over the channels preview, served by blether itself.
-What is left is slice 9 (retire the Python repos), the menubar icon and the
-settings redesign. README.md says what the app does; this file says how we
+On 2026-09-19 the settings window was redesigned as a sidebar (slice 11,
+ant blether-bREz9), the menubar icon became a robot head drawn in code, and
+the LLM page gained provider presets. What is left is slice 9 (retire the
+Python repos). README.md says what the app does; this file says how we
 work on it.
 
 The thinking behind the design is written down in `ant`, so you do not have
@@ -57,13 +59,17 @@ to re-derive it or, worse, re-argue it.
    at either end, so recordings are trimmed), the stop-skips-to-listening
    decision, and what was rejected. Long, appended through the day; read
    it top to bottom once.
-10. The latest handover note (`ant list`, the newest "Handover" title). It
+10. The settings redesign ADR: `ant show blether-bREz9` (sidebar, the page
+   list, the user's decisions made while using it: looking at an LLM
+   provider must not switch to it, content logging off by default, unique
+   profile names, status lines below Quit) and `blether-UYWmj` (the icon).
+11. The latest handover note (`ant list`, the newest "Handover" title). It
    says where things stand and what is next.
-11. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
+12. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
    An informal notepad of macOS Swift gotchas from earlier projects, not
    rules. blether departs from it in one place: no App Sandbox (see the
    decisions table for why).
-12. Only if you need the history and have the sibling checkouts:
+13. Only if you need the history and have the sibling checkouts:
    `../claude-speaks` has `ant show cs-XKtxA` and `ant show cs-Ed6UZ` (the
    two conversations that shaped the rewrite), and `../claude-listens` has
    `TECHNICAL_OVERVIEW.md` for the channels wire contract.
@@ -119,9 +125,17 @@ means the mic; "Listen on the network" is remote mode and unrelated.
   (`ProviderRegistry` holds them all; `KokoroProvider` over `HelperProcess`,
   which keeps `Helpers/kokoro.py` alive and talks JSON lines to it; the
   four API providers share `SpeechHTTP`), `PlaybackQueue` plays them one
-  at a time. The profile chooses the provider. The log is `~/Library/Logs/blether.log`. `Settings/` holds the
-  UserDefaults-backed store (`AppSettings`) and the settings window, one
-  file per section. `LLM/` is the chat-completions client.
+  at a time. The profile chooses the provider. The log is `~/Library/Logs/blether.log`;
+  lines that would carry spoken or heard words go through `Log.content`,
+  which hides them unless the user switched content logging on. `Settings/`
+  holds the UserDefaults-backed store (`AppSettings`) and the settings
+  window: `SettingsView` is a sidebar of pages (General, Profiles, Personas,
+  TTS Providers, LLM, Listening) and each page is one or two `*Section`
+  files. `Speech/VoiceSampler` plays and caches the per-voice sample behind
+  the Play buttons. `MenuBarIcon` draws the robot head in code as a template
+  image; there is no icon asset. `LLM/` is the chat-completions client plus
+  `LLMProvider`, the preset table (Anthropic, OpenAI, xAI, Mistral,
+  compatible) and `FirstAnswerLLM`, which clears the first-run nudge.
 - `Sources/Blether/Listening/`: one file per idea. `AudioInputDevice` lists
   mics through CoreAudio; `Microphone` captures through AVAudioEngine as
   16 kHz mono chunks; `SilenceDetector` is pure and clocked by chunk count;

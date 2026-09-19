@@ -13,8 +13,10 @@ struct SilenceDetector {
     /// "hello" on the built-in mic, so 0.01 RMS is the starting point; `peakRMS` is logged at the end of
     /// every recording to tune it from real rooms.
     static let threshold: Float = 0.01
-    /// Trailing quiet that ends a recording once speech has been heard.
-    static let trailingSilence: TimeInterval = 2.5
+    /// Trailing quiet that ends a recording once speech has been heard. The one timing a person
+    /// wants to move (slider on the Listening page); the two below are safety nets.
+    static let defaultTrailingSilence: TimeInterval = 2.5
+    static let trailingSilenceRange: ClosedRange<TimeInterval> = 1...6
     /// With no speech at all, give up after this long.
     static let noSpeechTimeout: TimeInterval = 15
     /// Nobody talks to Claude for longer than this in one go.
@@ -26,14 +28,16 @@ struct SilenceDetector {
     static let margin: TimeInterval = 0.3
 
     let secondsPerChunk: TimeInterval
+    let trailingSilence: TimeInterval
     private(set) var elapsed: TimeInterval = 0
     /// The end of the first and last chunks that counted as speech.
     private(set) var firstSpeechAt: TimeInterval?
     private(set) var lastSpeechAt: TimeInterval?
     private(set) var peakRMS: Float = 0
 
-    init(chunkSize: Int = Microphone.chunkSize, sampleRate: Double = Microphone.sampleRate) {
+    init(chunkSize: Int = Microphone.chunkSize, sampleRate: Double = Microphone.sampleRate, trailingSilence: TimeInterval = SilenceDetector.defaultTrailingSilence) {
         secondsPerChunk = Double(chunkSize) / sampleRate
+        self.trailingSilence = trailingSilence
     }
 
     var heardSpeech: Bool { lastSpeechAt != nil }
@@ -50,7 +54,7 @@ struct SilenceDetector {
             return heardSpeech ? .send : .cancel(reason: "no speech")
         }
         if let lastSpeechAt {
-            return elapsed - lastSpeechAt >= Self.trailingSilence ? .send : .listening
+            return elapsed - lastSpeechAt >= trailingSilence ? .send : .listening
         }
         return elapsed >= Self.noSpeechTimeout ? .cancel(reason: "no speech") : .listening
     }

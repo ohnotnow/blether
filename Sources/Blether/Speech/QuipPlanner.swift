@@ -21,7 +21,8 @@ struct QuipPlanner: Sendable {
         Log.log("notification language: \(language)")
         let voice = persona?.description ?? "a coding assistant"
         do {
-            let raw = try await llm.complete(system: Prompts.notification(persona: voice, language: language, history: history), user: "")
+            // Anthropic's compatible endpoint rejects an empty user message (400, seen 2026-09-19); Ollama and OpenAI did not mind.
+            let raw = try await llm.complete(system: Prompts.notification(persona: voice, language: language, history: history), user: Prompts.notificationUser)
             var line = SpeechText.firstLine(raw)
             if line != raw.trimmingCharacters(in: .whitespacesAndNewlines) {
                 Log.log("notification guard: multi-line output, kept first line")
@@ -31,7 +32,7 @@ struct QuipPlanner: Sendable {
                 Log.log("notification: model returned empty content")
                 return nil
             }
-            Log.log("notification: \(line)")
+            Log.log("notification: \(Log.content(line))")
             return PlannedQuip(text: SpeechText.cap(line, limit: Self.cap), language: language)
         } catch {
             Log.log("notification error: \(error)")

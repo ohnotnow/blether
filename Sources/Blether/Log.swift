@@ -1,6 +1,12 @@
 import Foundation
+import Synchronization
 
 enum Log {
+    /// Whether log lines may carry what was said, heard or sent (`content(_:)`). Off by default: the
+    /// process is logged either way, the words only when the person has switched it on (Settings,
+    /// General). Set from AppSettings at launch and whenever the toggle changes.
+    static let logsContent = Mutex(false)
+
     /// ~/Library/Logs/blether.log. macOS rotates nothing under Library/Logs, so `rotateIfLarge()` does.
     static let fileURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Logs/blether.log")
@@ -23,6 +29,18 @@ enum Log {
         let data = Data("\(Date.now.ISO8601Format()) \(message)\n".utf8)
         FileHandle.standardError.write(data)
         file?.write(data)
+    }
+
+    /// `preview` of user content, or a placeholder when content logging is off. Every log line that
+    /// would show a reply, a transcript or a persona line goes through here, not `preview` directly.
+    static func content(_ text: String, limit: Int = 80) -> String {
+        logsContent.withLock { $0 } ? "\"\(preview(text, limit: limit))\"" : "[\(text.count) chars, content logging off]"
+    }
+
+    /// Empties the log file in place, keeping the handle. The Clear button.
+    static func clear() {
+        _ = try? file?.truncate(atOffset: 0)
+        try? FileManager.default.removeItem(at: fileURL.appendingPathExtension("1"))
     }
 
     /// Whitespace-collapsed head of `text`, cut with an ellipsis, for log lines.

@@ -38,11 +38,12 @@ final class Recording {
     private let heard = HeardBox()
     private var finished = false
 
-    init(microphone: any MicrophoneSource, sounds: any Sounds, deviceID: String?, completion: @escaping @MainActor (Outcome) -> Void) {
+    init(microphone: any MicrophoneSource, sounds: any Sounds, deviceID: String?, trailingSilence: TimeInterval = SilenceDetector.defaultTrailingSilence, completion: @escaping @MainActor (Outcome) -> Void) {
         self.microphone = microphone
         self.sounds = sounds
         self.deviceID = deviceID
         self.completion = completion
+        heard.state.withLock { $0.detector = SilenceDetector(trailingSilence: trailingSilence) }
     }
 
     /// Opens the mic and plays the armed cue. Throws, with no cue, if the mic will not open.

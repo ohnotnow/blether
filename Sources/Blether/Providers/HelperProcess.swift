@@ -199,7 +199,7 @@ actor HelperProcess {
         guard gen == generation else { return }
         guard let data = line.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            Log.log("helper: non-JSON line ignored: \(Log.preview(line))")
+            Log.log("helper: non-JSON line ignored: \(Log.content(line))")
             return
         }
         if let event = object["event"] as? String {

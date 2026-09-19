@@ -176,8 +176,8 @@ final class SettingsTests: XCTestCase {
     @MainActor func testValuesRoundTripThroughASecondInstance() {
         let settings = settings
         let dame = Persona(id: "dame", name: "Dame", description: "a wildly excited pantomime dame")
-        settings.llmModel = "other:7b"
-        settings.llmBaseURL = "http://example.test/v1"
+        settings.setLLMModel("other:7b", for: .compatible)
+        settings.setLLMBaseURL("http://example.test/v1")
         settings.llmExtraBody = #"{"think": false}"#
         settings.personas = [Persona.marvin, dame]
         settings.roles = [.main: RoleSettings(personaID: "dame", voiceID: "v1"), .monologue: RoleSettings(personaID: nil, voiceID: "v2")]
@@ -208,13 +208,39 @@ final class SettingsTests: XCTestCase {
         let settings = settings
         XCTAssertNil(settings.llmAPIKey)
         XCTAssertFalse(settings.hasLLMKey)
-        settings.llmAPIKey = "sk-test"
+        settings.setAPIKey("sk-test", for: "llm")
         XCTAssertEqual(settings.llmAPIKey, "sk-test")
         XCTAssertTrue(settings.hasLLMKey)
         XCTAssertEqual(try keychain.secret(account: "llm"), "sk-test")
-        settings.llmAPIKey = nil
+        settings.setAPIKey(nil, for: "llm")
         XCTAssertNil(settings.llmAPIKey)
         XCTAssertFalse(settings.hasLLMKey)
+    }
+
+    @MainActor func testLLMPresetsOwnTheAddressAndShareSpeechKeys() throws {
+        let settings = settings
+        XCTAssertEqual(settings.llmProvider, .compatible, "an install from before presets keeps its Ollama")
+        settings.setLLMModel("mine:7b", for: .compatible)
+        XCTAssertEqual(settings.llmModel(for: .xai), "grok-4.6", "editing one provider leaves the others alone")
+        XCTAssertEqual(settings.llmModel, "mine:7b")
+
+        settings.llmProvider = .xai
+        XCTAssertEqual(settings.llmBaseURL, "https://api.x.ai/v1")
+        XCTAssertEqual(settings.llmModel, "grok-4.6")
+        settings.setLLMBaseURL("http://nope")
+        XCTAssertEqual(settings.llmBaseURL, "https://api.x.ai/v1", "a preset's address is fixed")
+        XCTAssertEqual(settings.llmBaseURL(for: .compatible), "http://nope")
+        settings.setAPIKey("xai-key", for: "xai")
+        XCTAssertEqual(settings.llmAPIKey, "xai-key", "the speech provider's key, from the same Keychain entry")
+        XCTAssertEqual(LLMProvider.anthropic.keychainAccount, "anthropic", "its own account")
+        XCTAssertEqual(LLMProvider.compatible.keychainAccount, "llm", "the pre-preset account, so an existing key still works")
+
+        settings.setLLMModel("grok-4.6-mini", for: .xai)
+        settings.llmProvider = .compatible
+        XCTAssertEqual(settings.llmModel, "mine:7b", "each provider keeps its model")
+        XCTAssertEqual(settings.llmProvider, .compatible)
+        settings.llmProvider = .xai
+        XCTAssertEqual(settings.llmModel, "grok-4.6-mini")
     }
 
     // MARK: - Profiles
@@ -288,6 +314,32 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(settings.defaultProfileID, "default", "adding does not move the default")
     }
 
+    @MainActor func testTrailingSilenceDefaultsAndClamps() {
+        let settings = settings
+        XCTAssertEqual(settings.trailingSilence, 2.5)
+        settings.trailingSilence = 4
+        XCTAssertEqual(self.settings.trailingSilence, 4)
+        defaults.set(0.1, forKey: "trailingSilence")
+        XCTAssertEqual(self.settings.trailingSilence, 1)
+        defaults.set(60, forKey: "trailingSilence")
+        XCTAssertEqual(self.settings.trailingSilence, 6)
+    }
+
+    @MainActor func testProfileNamesStayUnique() {
+        let settings = settings
+        XCTAssertEqual(settings.addProfile(name: "New profile").name, "New profile")
+        XCTAssertEqual(settings.addProfile(name: "New profile").name, "New profile 2")
+        XCTAssertEqual(settings.addProfile(name: "new PROFILE ").name, "new PROFILE 3", "matched the way hooks match: trimmed, any case; your casing is kept")
+        let pi = settings.addProfile(name: "pi")
+
+        XCTAssertFalse(settings.renameProfile(id: pi.id, name: "Default"), "the first profile is Default")
+        XCTAssertEqual(settings.profile(named: "pi"), settings.profiles.last)
+        XCTAssertTrue(settings.renameProfile(id: pi.id, name: "pi"), "keeping your own name is fine")
+        XCTAssertTrue(settings.renameProfile(id: pi.id, name: "hermes"))
+        XCTAssertTrue(settings.isProfileNameTaken("HERMES", excluding: nil))
+        XCTAssertFalse(settings.isProfileNameTaken("hermes", excluding: pi.id))
+    }
+
     @MainActor func testDeletingTheDefaultHandsDefaultToTheFirstRemaining() {
         let settings = settings
         let pi = settings.addProfile(name: "pi")
@@ -324,6 +376,33 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(settings.defaultProfile.providerID)
         settings.setProvider(id: "xai", in: "ghost")
         XCTAssertNil(settings.defaultProfile.providerID)
+    }
+
+    @MainActor func testSwitchingProviderAndBackRestoresTheVoicesEachProviderHad() throws {
+        let settings = settings
+        var roles = settings.roles
+        roles[.main]?.voiceID = "kokoro-main"
+        roles[.monologue]?.voiceID = "kokoro-preamble"
+        settings.updateRoles(roles, in: "default")
+
+        settings.setProvider(id: "elevenlabs", in: "default")
+        XCTAssertEqual(settings.roles[.main]?.voiceID, "kokoro-main", "nothing remembered for ElevenLabs yet, so the ids are left alone")
+        roles = settings.roles
+        roles[.main]?.voiceID = "eleven-main"
+        settings.updateRoles(roles, in: "default")
+
+        settings.setProvider(id: nil, in: "default")
+        XCTAssertEqual(settings.roles[.main]?.voiceID, "kokoro-main")
+        XCTAssertEqual(settings.roles[.monologue]?.voiceID, "kokoro-preamble")
+
+        settings.setProvider(id: "elevenlabs", in: "default")
+        XCTAssertEqual(settings.roles[.main]?.voiceID, "eleven-main")
+        XCTAssertEqual(settings.roles[.monologue]?.voiceID, "kokoro-preamble", "never chosen under ElevenLabs, so it keeps the Kokoro id")
+        XCTAssertEqual(settings.roles[.main]?.personaID, roles[.main]?.personaID, "personas are not per provider")
+
+        let old = try JSONEncoder().encode([Profile(id: "default", name: "Default", roles: [:])])
+        defaults.set(old, forKey: "profiles")
+        XCTAssertEqual(self.settings.defaultProfile.rememberedVoices, [:], "a profile saved before the memory decodes")
     }
 
     @MainActor func testProviderKeysLiveInKeychainOnePerProvider() throws {
@@ -371,5 +450,35 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(settings.profile(named: "pi").roles[.main]?.personaID)
         XCTAssertEqual(settings.profile(named: "pi").roles[.main]?.voiceID, "v")
         XCTAssertNil(settings.roles[.monologue]?.personaID)
+    }
+}
+
+final class LogContentTests: XCTestCase {
+    override func tearDown() { Log.logsContent.withLock { $0 = false } }
+
+    func testContentIsHiddenUnlessSwitchedOn() {
+        Log.logsContent.withLock { $0 = false }
+        XCTAssertEqual(Log.content("send it to someone at example dot com"), "[37 chars, content logging off]")
+        Log.logsContent.withLock { $0 = true }
+        XCTAssertEqual(Log.content("send it to  someone"), "\"send it to someone\"")
+    }
+}
+
+final class FirstAnswerLLMTests: XCTestCase {
+    private struct Canned: LLM {
+        let result: Result<String, LLMError>
+        func complete(system: String, user: String) async throws -> String { try result.get() }
+    }
+
+    func testReportsOnlyAnAnswer() async throws {
+        let counter = ProviderTestSupport.Counter()
+        let ok = FirstAnswerLLM(wrapped: Canned(result: .success("hi"))) { counter.increment() }
+        let answer = try await ok.complete(system: "", user: "")
+        XCTAssertEqual(answer, "hi")
+        XCTAssertEqual(counter.value, 1)
+
+        let bad = FirstAnswerLLM(wrapped: Canned(result: .failure(.emptyResponse))) { counter.increment() }
+        do { _ = try await bad.complete(system: "", user: ""); XCTFail("expected a throw") } catch {}
+        XCTAssertEqual(counter.value, 1)
     }
 }

@@ -19,7 +19,10 @@ enum ToneSource: String, CaseIterable, Sendable {
 @MainActor @Observable
 final class AppSettings {
     private enum Key {
+        static let llmProvider = "llmProvider"
+        /// The compatible provider's typed base URL. Presets have theirs in `LLMProvider.baseURL`.
         static let llmBaseURL = "llmBaseURL"
+        /// The compatible provider's model, from before presets. A preset's model is under "llmModel.<provider>".
         static let llmModel = "llmModel"
         static let llmExtraBody = "llmExtraBody"
         static let personas = "personas"
@@ -38,8 +41,10 @@ final class AppSettings {
         static let toneSource = "toneSource"
         static let microphoneID = "microphoneID"
         static let listensAfterReply = "listensAfterReply"
+        static let trailingSilence = "trailingSilence"
+        static let logsContent = "logsContent"
+        static let llmHasAnswered = "llmHasAnswered"
     }
-    private static let llmKeyAccount = "llm"
 
     /// The old claude-speaks weighting (English rare, everything else 5), restricted to the languages
     /// Kokoro can pronounce with what the helper installs. Japanese is deliberately absent: its
@@ -67,14 +72,45 @@ final class AppSettings {
         self.keychain = keychain
     }
 
-    var llmBaseURL: String {
-        get { _ = revision; return defaults.string(forKey: Key.llmBaseURL) ?? "http://127.0.0.1:11434/v1" }
-        set { defaults.set(newValue, forKey: Key.llmBaseURL); revision += 1 }
+    /// Compatible by default, so an install from before presets keeps its Ollama.
+    var llmProvider: LLMProvider {
+        get { _ = revision; return defaults.string(forKey: Key.llmProvider).flatMap(LLMProvider.init(rawValue:)) ?? .compatible }
+        set { defaults.set(newValue.rawValue, forKey: Key.llmProvider); revision += 1 }
     }
 
-    var llmModel: String {
-        get { _ = revision; return defaults.string(forKey: Key.llmModel) ?? "maternion/minicpm5:2b" }
-        set { defaults.set(newValue, forKey: Key.llmModel); revision += 1 }
+    /// The provider in use: its address, model and key. The page edits any provider through the
+    /// `(for:)` forms below and makes one current with `llmProvider`; only "Use this provider" changes
+    /// what replies go through (the user's decision, 2026-09-19: looking must not switch).
+    var llmBaseURL: String { llmBaseURL(for: llmProvider) }
+    var llmModel: String { llmModel(for: llmProvider) }
+    var llmAPIKey: String? { apiKey(for: llmProvider.keychainAccount) }
+    var hasLLMKey: Bool { llmAPIKey != nil }
+
+    /// The preset's address, or the typed one for the compatible provider.
+    func llmBaseURL(for provider: LLMProvider) -> String {
+        _ = revision
+        return provider.baseURL ?? defaults.string(forKey: Key.llmBaseURL) ?? "http://127.0.0.1:11434/v1"
+    }
+
+    /// Only the compatible provider's address can be typed; a preset's is fixed.
+    func setLLMBaseURL(_ url: String) {
+        defaults.set(url, forKey: Key.llmBaseURL)
+        revision += 1
+    }
+
+    /// Kept per provider, so switching to xAI and back to Ollama does not lose either model name.
+    func llmModel(for provider: LLMProvider) -> String {
+        _ = revision
+        return defaults.string(forKey: Self.modelKey(provider)) ?? provider.defaultModel
+    }
+
+    func setLLMModel(_ model: String, for provider: LLMProvider) {
+        defaults.set(model, forKey: Self.modelKey(provider))
+        revision += 1
+    }
+
+    private static func modelKey(_ provider: LLMProvider) -> String {
+        provider == .compatible ? Key.llmModel : "\(Key.llmModel).\(provider.rawValue)"
     }
 
     /// A JSON object merged into every LLM request, for endpoint-specific knobs that are not
@@ -128,18 +164,38 @@ final class AppSettings {
         set { updateRoles(newValue, in: defaultProfileID) }
     }
 
-    /// Trims the name and copies the default profile's roles under a fresh id.
+    /// Trims the name and copies the default profile's roles under a fresh id. A name another profile
+    /// already has gets a number ("New profile 2"): hooks find profiles by name, so two alike would
+    /// leave one unreachable.
     @discardableResult
     func addProfile(name: String) -> Profile {
-        let profile = Profile(id: UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), roles: defaultProfile.roles)
+        let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var unique = wanted
+        var suffix = 2
+        while isProfileNameTaken(unique, excluding: nil) {
+            unique = "\(wanted) \(suffix)"
+            suffix += 1
+        }
+        let profile = Profile(id: UUID().uuidString, name: unique, roles: defaultProfile.roles)
         profiles.append(profile)
         return profile
     }
 
-    /// Unknown id is a no-op.
-    func renameProfile(id: String, name: String) {
-        guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
-        profiles[index].name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Unknown id is a no-op, and so is a name another profile already has (case-insensitive, trimmed);
+    /// both return false so the caller can say so.
+    @discardableResult
+    func renameProfile(id: String, name: String) -> Bool {
+        guard let index = profiles.firstIndex(where: { $0.id == id }) else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isProfileNameTaken(trimmed, excluding: id) else { return false }
+        profiles[index].name = trimmed
+        return true
+    }
+
+    /// Whether a profile other than `excluding` already answers to this name, the way `profile(named:)` matches.
+    func isProfileNameTaken(_ name: String, excluding id: String?) -> Bool {
+        let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return profiles.contains { $0.id != id && $0.name.caseInsensitiveCompare(wanted) == .orderedSame }
     }
 
     /// Refuses to delete the last profile. Deleting the default hands default to the first remaining one.
@@ -150,10 +206,18 @@ final class AppSettings {
         if wasDefault { defaultProfileID = profiles[0].id }
     }
 
-    /// Unknown profile id is a no-op. nil provider means the registry's default.
+    /// Unknown profile id is a no-op. nil provider means the registry's default. The voices the roles
+    /// had under the old provider are remembered, and any remembered for the new one come back;
+    /// with nothing remembered the voice ids are left as they are (the picker shows them as unavailable).
     func setProvider(id: String?, in profileID: String) {
         guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
-        profiles[index].providerID = id
+        var profile = profiles[index]
+        profile.rememberedVoices[profile.providerID ?? ProviderRegistry.defaultID] = profile.roles.mapValues(\.voiceID)
+        profile.providerID = id
+        for (role, voice) in profile.rememberedVoices[id ?? ProviderRegistry.defaultID] ?? [:] {
+            profile.roles[role]?.voiceID = voice
+        }
+        profiles[index] = profile
     }
 
     /// Unknown id is a no-op.
@@ -209,6 +273,34 @@ final class AppSettings {
     var listensOnLAN: Bool {
         get { _ = revision; return defaults.bool(forKey: Key.listensOnLAN) }
         set { defaults.set(newValue, forKey: Key.listensOnLAN); revision += 1 }
+    }
+
+    /// False until an LLM has answered once. While false the LLM page wears a "Set up" badge and the
+    /// menubar says replies are read raw; a fresh install points at an Ollama it probably lacks.
+    var llmHasAnswered: Bool {
+        get { _ = revision; return defaults.bool(forKey: Key.llmHasAnswered) }
+        set { defaults.set(newValue, forKey: Key.llmHasAnswered); revision += 1 }
+    }
+
+    /// Whether the log may carry the words spoken, heard and sent. Off by default, like listensOnLAN.
+    var logsContent: Bool {
+        get { _ = revision; return defaults.bool(forKey: Key.logsContent) }
+        set {
+            defaults.set(newValue, forKey: Key.logsContent)
+            Log.logsContent.withLock { $0 = newValue }
+            revision += 1
+        }
+    }
+
+    /// How long the person can go quiet before what they said is sent. Clamped on read so a stray
+    /// stored value cannot make the ears hang up instantly or never.
+    var trailingSilence: TimeInterval {
+        get {
+            _ = revision
+            guard defaults.object(forKey: Key.trailingSilence) != nil else { return SilenceDetector.defaultTrailingSilence }
+            return min(max(defaults.double(forKey: Key.trailingSilence), SilenceDetector.trailingSilenceRange.lowerBound), SilenceDetector.trailingSilenceRange.upperBound)
+        }
+        set { defaults.set(newValue, forKey: Key.trailingSilence); revision += 1 }
     }
 
     /// Who decides a reply's mood, if anyone (blether-uqwCr). Off by default; an unknown stored value reads as off.
@@ -287,25 +379,6 @@ final class AppSettings {
         return stored
     }
 
-    var llmAPIKey: String? {
-        get {
-            _ = revision
-            do { return try keychain.secret(account: Self.llmKeyAccount) } catch {
-                Log.log("keychain read failed: \(error)")
-                return nil
-            }
-        }
-        set {
-            do {
-                if let newValue { try keychain.save(newValue, account: Self.llmKeyAccount) } else { try keychain.delete(account: Self.llmKeyAccount) }
-            } catch {
-                Log.log("keychain write failed: \(error)")
-            }
-            revision += 1
-        }
-    }
-
-    var hasLLMKey: Bool { llmAPIKey != nil }
 
     /// A speech provider's key, under a Keychain account named after the provider ("elevenlabs", "openai", ...).
     func apiKey(for provider: String) -> String? {
