@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The prebuilt CTranscribe framework (Packages/TranscribeCpp) is ad-hoc signed by its authors.
+	     Hardened-runtime library validation only accepts libraries signed by the same team or by Apple,
+	     and two ad-hoc signatures never count as the same team (verified 2026-09-19: re-signing the
+	     framework locally did not help). The user's decision, 2026-09-19: keep the hardened runtime and
+	     disable library validation. See ant blether-ZP9vQ. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	<!-- Without this the hardened runtime never shows the microphone prompt: tccd logs "requires entitlement
+	     com.apple.security.device.audio-input but it is missing" and the tap delivers silence (seen 2026-09-19). -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

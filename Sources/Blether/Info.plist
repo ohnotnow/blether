@@ -24,5 +24,7 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>blether listens for your reply after Claude speaks. The microphone opens only while Listen after Claude replies is on.</string>
 </dict>
 </plist>

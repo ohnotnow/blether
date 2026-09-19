@@ -32,6 +32,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: uk.ohnotnow.blether
         ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: Sources/Blether/Blether.entitlements
         GENERATE_INFOPLIST_FILE: YES
     info:
       path: Sources/Blether/Info.plist
@@ -39,6 +40,7 @@ targets:
         LSUIElement: true
         CFBundleDisplayName: blether
         NSHumanReadableCopyright: ""
+        NSMicrophoneUsageDescription: "blether listens for your reply after Claude speaks. The microphone opens only while Listen after Claude replies is on."
   BletherTests:
     type: bundle.unit-test
     platform: macOS

@@ -6,3 +6,4 @@ xcuserdata/
 /.claude/settings.local.json
 /Blether.xcodeproj
 /channels*.md
+/local.mk

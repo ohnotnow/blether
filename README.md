@@ -96,6 +96,22 @@ make run    # builds and launches it
 make test   # runs the unit tests
 ```
 
+Builds are ad-hoc signed, which is fine to run but means each new build is
+a different program to the keychain, so it asks for your password before
+handing over the stored API keys. If you rebuild often, sign every build with
+the same certificate instead: run `security find-identity -v -p codesigning`, and put the
+certificate's hash and the team id from that line in an untracked `local.mk`
+next to the Makefile:
+
+```make
+SIGN = 0123456789ABCDEF0123456789ABCDEF01234567
+TEAM = ABCDE12345
+```
+
+An Apple Development certificate is the usual one. The certificate's name
+does not work in place of the hash. Tick "Always Allow" once and the
+prompt is gone.
+
 A speaker icon appears in the menubar. There is no Dock icon and no main
 window.
 
