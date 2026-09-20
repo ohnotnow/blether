@@ -20,10 +20,11 @@ struct BletherApp: App {
         Log.logsContent.withLock { $0 = settings.logsContent }
         let queue = PlaybackQueue()
         let registry = Self.makeRegistry(settings: settings, state: state)
+        let ears = Self.makeEars(settings: settings, state: state)
         let channel = ChannelServer { action, reply in
-            Task { @MainActor in reply(Self.handsfree(action, settings: settings, state: state)) }
+            Task { @MainActor in reply(Self.handsfree(action, settings: settings, state: state, ears: ears)) }
         }
-        let ears = Self.makeEars(settings: settings, state: state, channel: channel)
+        ears.deliver = Self.deliverer(channel: channel, state: state)
         let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings, ears: ears) { settings in
             let client = ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
             guard !settings.llmHasAnswered else { return client }
@@ -121,38 +122,42 @@ struct BletherApp: App {
         Binding(get: { settings.isEnabled }, set: { setSpeaking($0, settings: settings, queue: queue) })
     }
 
-    /// Off closes an open microphone at once; on warms the model so the first reply is not kept waiting.
+    /// Same switch as the `handsfree` tool: see `setListening`.
     private var listening: Binding<Bool> {
-        Binding(get: { settings.listensAfterReply }, set: { on in
-            settings.listensAfterReply = on
-            if on { Task { await ears.warmUp() } } else { ears.cancel() }
-        })
+        Binding(get: { settings.listensAfterReply }, set: { setListening($0, settings: settings, ears: ears) })
     }
 
-    /// Microphone, transcriber and sounds, with the status line going to the menubar. A transcript goes
-    /// down the channel to the session that armed the mic; if that session has no channel, it is said, not lost.
+    /// Microphone, transcriber and sounds, with the status line going to the menubar. Where a transcript
+    /// goes is set afterwards (`deliverer`), once the channel server exists.
     @MainActor
-    private static func makeEars(settings: AppSettings, state: AppState, channel: ChannelServer) -> Ears {
+    private static func makeEars(settings: AppSettings, state: AppState) -> Ears {
         let transcriber = Transcriber(store: ModelStore()) { line in
             Task { @MainActor in state.listeningStatus = line }
         }
         return Ears(settings: settings, microphone: Microphone(), transcriber: transcriber, sounds: SystemSounds(),
                     status: { state.listeningStatus = $0 },
-                    deliver: { text, session in
-                        if !channel.deliver(text, to: session) {
-                            Log.log("heard \(Log.content(text)) but session \(session.id ?? "?") has no channel; is it running with the channel flag?")
-                            state.listeningStatus = "Heard you, but that session has no channel"
-                            SystemSounds().play(.cancelled)
-                        }
-                    })
+                    deliver: { _, _ in })
     }
 
-    /// The `handsfree` tool Claude can call from a session: flips the same setting as the toggles.
+    /// A transcript goes down the channel to the session that armed the mic; if that session has no
+    /// channel, it is said, not lost.
     @MainActor
-    private static func handsfree(_ action: String, settings: AppSettings, state: AppState) -> String {
+    private static func deliverer(channel: ChannelServer, state: AppState) -> @MainActor (String, SessionKey) -> Void {
+        { text, session in
+            if !channel.deliver(text, to: session) {
+                Log.log("heard \(Log.content(text)) but session \(session.id ?? "?") has no channel; is it running with the channel flag?")
+                state.listeningStatus = "Heard you, but that session has no channel"
+                SystemSounds().play(.cancelled)
+            }
+        }
+    }
+
+    /// The `handsfree` tool Claude can call from a session: the same switch as the toggles.
+    @MainActor
+    private static func handsfree(_ action: String, settings: AppSettings, state: AppState, ears: Ears) -> String {
         switch action {
-        case "on": settings.listensAfterReply = true
-        case "off": settings.listensAfterReply = false
+        case "on": setListening(true, settings: settings, ears: ears)
+        case "off": setListening(false, settings: settings, ears: ears)
         default: break
         }
         let ears = settings.listensAfterReply ? "Listening after replies is on." : "Listening after replies is off."

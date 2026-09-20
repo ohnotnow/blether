@@ -16,7 +16,9 @@ final class Ears: EarsArming {
     private let sounds: any Sounds
     private let status: @MainActor (String?) -> Void
     /// Hands a transcript to the session it was armed for. The channel server provides this.
-    private let deliver: @MainActor (String, SessionKey) -> Void
+    /// Settable because the ears and the channel server each need the other at launch: the ears are
+    /// made first and told where transcripts go once the channel exists.
+    var deliver: @MainActor (String, SessionKey) -> Void
     private var current: Recording?
     private var arming = false
 

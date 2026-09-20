@@ -6,3 +6,12 @@ func setSpeaking(_ on: Bool, settings: AppSettings, queue: PlaybackQueue) {
     settings.isEnabled = on
     if !on { queue.stop() }
 }
+
+/// Flips listening. Off closes an open microphone at once; on warms the model so the first reply
+/// is not kept waiting. The menubar toggle, the settings window and the `handsfree` channel tool all
+/// go through here (the 2026-09-20 review found the tool changed the setting and left the mic open).
+@MainActor
+func setListening(_ on: Bool, settings: AppSettings, ears: Ears) {
+    settings.listensAfterReply = on
+    if on { Task { await ears.warmUp() } } else { ears.cancel() }
+}

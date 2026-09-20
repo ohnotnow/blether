@@ -98,6 +98,22 @@ final class EarsTests: XCTestCase {
         XCTAssertEqual(sounds.played, [.armed, .sent, .cancelled])
     }
 
+    /// The 2026-09-20 review: the channel's `handsfree off` flipped the setting and left the mic open.
+    func testSetListeningOffClosesAnOpenMic() async {
+        setListening(true, settings: settings, ears: ears)
+        await settle()
+        XCTAssertEqual(transcriber.warmUps, 1, "on warms the model")
+        ears.arm(for: session)
+        await settle()
+        XCTAssertTrue(ears.isListening)
+        setListening(false, settings: settings, ears: ears)
+        await settle()
+        XCTAssertFalse(settings.listensAfterReply)
+        XCTAssertFalse(ears.isListening)
+        XCTAssertEqual(mic.stopped, 1)
+        XCTAssertTrue(delivered.isEmpty)
+    }
+
     func testCancelClosesTheMicWithoutDelivering() async {
         settings.listensAfterReply = true
         ears.arm(for: session)

@@ -200,8 +200,9 @@ final class SpeechPipeline: Sendable {
             Log.log("synthesis failed (\(provider.name), \(clip.role.rawValue)): \(error)")
             // The preamble is a garnish; losing the reply itself must be heard.
             if clip.role == .main { await MainActor.run { NSSound.beep() } }
-            // Nothing will finish playing for this clip, so open the ears now rather than never.
-            if let arm { await arm() }
+            // Nothing will finish playing for this clip, so open the ears now rather than never; unless
+            // the user pressed stop meanwhile, when the audio would have been dropped and so is the arming.
+            if let arm, await queue.generation == generation { await arm() }
         }
     }
 }

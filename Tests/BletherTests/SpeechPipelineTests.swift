@@ -58,6 +58,18 @@ private struct StopsMidSynthesisProvider: Provider {
     }
 }
 
+/// Simulates the user pressing stop while synthesis is still running, and then synthesis failing.
+private struct StopsThenFailsProvider: Provider {
+    let name = "stopping-failing"
+    let maxMainCharacters = 800
+    let queue: PlaybackQueue
+    func voices() async throws -> [Voice] { [] }
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip {
+        await queue.stop()
+        throw ProviderError.noAudio
+    }
+}
+
 @MainActor
 final class FakeEars: EarsArming {
     private(set) var armed: [SessionKey] = []
@@ -126,6 +138,13 @@ final class SpeechPipelineTests: XCTestCase {
         provider.failAll = true
         await pipeline().speak(long, session: session)
         XCTAssertEqual(ears.armed, [session])
+    }
+
+    /// The 2026-09-20 review: a failure after stop used to open the mic for a reply whose audio would have been dropped.
+    func testFailureAfterStopDoesNotArm() async {
+        settings.listensAfterReply = true
+        await pipeline(provider: StopsThenFailsProvider(queue: queue)).speak(long, session: session)
+        XCTAssertEqual(ears.armed, [])
     }
 
     func testNoSessionMeansNoArming() async {

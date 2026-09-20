@@ -54,7 +54,7 @@ actor Transcriber: Transcribing {
         let started = Date()
         let transcript = try run(loaded.session, pcm)
         let text = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        Log.log("ears: \(String(format: "%.1f", Double(pcm.count) / Microphone.sampleRate)) s of audio in \(Int(Date().timeIntervalSince(started) * 1000)) ms: \(Log.preview(text))")
+        Log.log("ears: \(String(format: "%.1f", Double(pcm.count) / Microphone.sampleRate)) s of audio in \(Int(Date().timeIntervalSince(started) * 1000)) ms: \(Log.content(text))")
         if text.isEmpty { Self.keepForInspection(pcm) }
         return text
     }
