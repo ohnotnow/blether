@@ -157,7 +157,7 @@ helper's environment; the menubar says "Kokoro: warming up" until it is
 ready. If Blether cannot find uv, the menubar says so and Settings >
 Listening has a field for its path.
 
-Out of the box the LLM is [Ollama](https://ollama.com) at  
+Out of the box the LLM is [Ollama](https://ollama.com) at
 `http://127.0.0.1:11434/v1` with the model `maternion/minicpm5:2b`. If
 Ollama is not running you still hear the reply, prefixed with a heads-up
 that the LLM fell over. To use something else, open "Settings..." from the
