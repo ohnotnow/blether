@@ -63,13 +63,17 @@ to re-derive it or, worse, re-argue it.
    list, the user's decisions made while using it: looking at an LLM
    provider must not switch to it, content logging off by default, unique
    profile names, status lines below Quit) and `blether-UYWmj` (the icon).
-11. The latest handover note (`ant list`, the newest "Handover" title). It
+11. The 2026-09-20 external review: `ant show blether-yYpms` (hold the mic,
+   not the queue: a finish handler waits until nothing is playing) and the
+   note "The 2026-09-20 external code review" (`ant search "code review"`),
+   which lists what was fixed and what was left, so you do not redo it.
+12. The latest handover note (`ant list`, the newest "Handover" title). It
    says where things stand and what is next.
-12. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
+13. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
    An informal notepad of macOS Swift gotchas from earlier projects, not
    rules. blether departs from it in one place: no App Sandbox (see the
    decisions table for why).
-13. Only if you need the history and have the sibling checkouts:
+14. Only if you need the history and have the sibling checkouts:
    `../claude-speaks` has `ant show cs-XKtxA` and `ant show cs-Ed6UZ` (the
    two conversations that shaped the rewrite), and `../claude-listens` has
    `TECHNICAL_OVERVIEW.md` for the channels wire contract.
@@ -147,7 +151,8 @@ means the mic; "Listen on the network" is remote mode and unrelated.
   is the pure lookup (id, then pid, then the only connection);
   `ChannelServer` is the second NWListener speaking JSON-RPC by hand.
   `PlaybackQueue.enqueue(onFinished:)` is how a reply's last clip arms the
-  ears, and `stop()` fires that handler too.
+  ears; the handler waits until nothing else is playing, and `stop()` fires
+  it too. `setListening` in `Speaking.swift` is the one listening switch.
 - `Packages/TranscribeCpp/`: the transcribe.cpp Swift binding, vendored from
   their tag v0.2.3 with a Package.swift that points at the release
   xcframework by URL and checksum. Their standalone SwiftPM mirror did not
