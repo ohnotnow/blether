@@ -25,6 +25,9 @@ final class PlaybackQueue {
     /// (2026-09-19) is that stopping a reply skips straight to listening, as the old loop did. Not
     /// called when a clip fails to start.
     private var finishHandlers: [URL: @MainActor () -> Void] = [:]
+    /// Finish handlers whose clip ended while more audio was queued. They open the microphone, and a
+    /// mic opened under another session's reply hears that reply (blether-yYpms), so they wait for quiet.
+    private var heldUntilQuiet: [@MainActor () -> Void] = []
 
     /// Bumped by `stop()`. A clip synthesised under an older generation is dropped on arrival.
     private(set) var generation = 0
@@ -59,6 +62,9 @@ final class PlaybackQueue {
         pending.forEach(remove)
         pending.removeAll()
         finishHandlers.removeAll()
+        let held = heldUntilQuiet
+        heldUntilQuiet.removeAll()
+        held.forEach { $0() }
         skippedTo?()
     }
 
@@ -78,6 +84,7 @@ final class PlaybackQueue {
             NSSound.beep()
             remove(clip)
             playNext()
+            releaseHeldIfQuiet()
         }
     }
 
@@ -87,7 +94,15 @@ final class PlaybackQueue {
         let handler = finishHandlers.removeValue(forKey: clip.url)
         remove(clip)
         playNext()
-        handler?()
+        if let handler { heldUntilQuiet.append(handler) }
+        releaseHeldIfQuiet()
+    }
+
+    private func releaseHeldIfQuiet() {
+        guard current == nil, !heldUntilQuiet.isEmpty else { return }
+        let held = heldUntilQuiet
+        heldUntilQuiet.removeAll()
+        held.forEach { $0() }
     }
 
     private func remove(_ clip: AudioClip) {

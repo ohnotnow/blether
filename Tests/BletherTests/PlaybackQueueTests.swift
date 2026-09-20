@@ -78,16 +78,54 @@ final class PlaybackQueueTests: XCTestCase {
     func testOnFinishedFiresAfterThatClipEndsAndOnlyThatClip() {
         var fired: [String] = []
         queue.enqueue(makeTestClip(), onFinished: { fired.append("first") })
-        queue.enqueue(makeTestClip())
-        queue.enqueue(makeTestClip(), onFinished: { fired.append("third") })
         XCTAssertEqual(fired, [])
         players[0].finish()
         XCTAssertEqual(fired, ["first"])
+        queue.enqueue(makeTestClip())
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("third") })
         players[1].finish()
         XCTAssertEqual(fired, ["first"])
         players[2].finish()
         XCTAssertEqual(fired, ["first", "third"])
         XCTAssertFalse(queue.isPlaying)
+    }
+
+    /// The user's decision (2026-09-20, blether-yYpms): a handler that opens the mic waits until nothing
+    /// is playing, so reply B is not heard as the answer to reply A. A keeps its turn: it fires first.
+    func testFinishHandlerWaitsForQuietWhenMoreIsQueued() {
+        var fired: [String] = []
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("A") })
+        queue.enqueue(makeTestClip())
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("B") })
+        players[0].finish()
+        XCTAssertEqual(fired, [], "B's audio is playing, so A's mic stays shut")
+        XCTAssertTrue(queue.isPlaying)
+        players[1].finish()
+        XCTAssertEqual(fired, [])
+        players[2].finish()
+        XCTAssertEqual(fired, ["A", "B"])
+        XCTAssertFalse(queue.isPlaying)
+    }
+
+    func testHeldHandlerFiresWhenTheRestFailsToStart() {
+        var fired: [String] = []
+        let broken = makeTestClip()
+        fakes.refusing = [broken.url]
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("A") })
+        queue.enqueue(broken)
+        players[0].finish()
+        XCTAssertEqual(fired, ["A"])
+        XCTAssertFalse(queue.isPlaying)
+    }
+
+    func testStopReleasesAHeldHandlerBeforeTheSkippedOne() {
+        var fired: [String] = []
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("A") })
+        queue.enqueue(makeTestClip(), onFinished: { fired.append("B") })
+        players[0].finish()
+        XCTAssertEqual(fired, [])
+        queue.stop()
+        XCTAssertEqual(fired, ["A", "B"], "A earned the mic first; the ears refuse the second arm anyway")
     }
 
     /// The user's decision (2026-09-19): stopping a reply skips to listening rather than cancelling it.
