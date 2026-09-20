@@ -176,7 +176,7 @@ final class AppSettings {
             unique = "\(wanted) \(suffix)"
             suffix += 1
         }
-        let profile = Profile(id: UUID().uuidString, name: unique, roles: defaultProfile.roles)
+        let profile = Profile(id: UUID().uuidString, name: unique, roles: defaultProfile.roles, providerID: defaultProfile.providerID, rememberedVoices: defaultProfile.rememberedVoices)
         profiles.append(profile)
         return profile
     }

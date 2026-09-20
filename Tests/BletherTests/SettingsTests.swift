@@ -314,6 +314,16 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(settings.defaultProfileID, "default", "adding does not move the default")
     }
 
+    /// The 2026-09-20 review: a copy of an OpenAI default profile was landing on Kokoro with OpenAI voice ids.
+    @MainActor func testAddProfileCopiesTheDefaultProviderAndRememberedVoices() {
+        let settings = settings
+        settings.setProvider(id: "OpenAI", in: settings.defaultProfileID)
+        let pi = settings.addProfile(name: "pi")
+        XCTAssertEqual(pi.providerID, "OpenAI")
+        XCTAssertEqual(pi.roles, settings.defaultProfile.roles)
+        XCTAssertEqual(pi.rememberedVoices, settings.defaultProfile.rememberedVoices)
+    }
+
     @MainActor func testTrailingSilenceDefaultsAndClamps() {
         let settings = settings
         XCTAssertEqual(settings.trailingSilence, 2.5)
