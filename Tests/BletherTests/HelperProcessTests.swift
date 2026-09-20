@@ -132,6 +132,45 @@ final class HelperProcessTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: out.path))
     }
 
+    /// The 2026-09-20 review: a cancelled waiter used to spin through `try?` sleeps until ready.
+    func testCancelledStartReturnsAtOnceAndTheChildStillReachesReady() async throws {
+        helper = try makeHelper(["--delay", "1"])
+        let helper = helper!
+        let waiter = Task { await helper.start() }
+        for _ in 0 ..< 40 {
+            if await helper.state == .starting { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let clock = ContinuousClock()
+        let started = clock.now
+        waiter.cancel()
+        await waiter.value
+        XCTAssertLessThan(clock.now - started, .milliseconds(500), "the cancelled waiter should not wait for ready")
+        await helper.start()
+        let state = await helper.state
+        XCTAssertEqual(state, .ready)
+    }
+
+    func testCancelledRequestDuringStartingThrowsCancellation() async throws {
+        helper = try makeHelper(["--delay", "1"])
+        let helper = helper!
+        Task { await helper.start() }
+        for _ in 0 ..< 40 {
+            if await helper.state == .starting { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let out = tempWAV()
+        defer { try? FileManager.default.removeItem(at: out) }
+        let request = Task { try await helper.request(text: "early", voice: "af_heart", out: out, timeout: .seconds(10)) }
+        request.cancel()
+        do {
+            try await request.value
+            XCTFail("expected cancellation")
+        } catch is CancellationError {
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: out.path))
+    }
+
     func testStopLeavesNoChildRunning() async throws {
         helper = try makeHelper()
         await helper.start()

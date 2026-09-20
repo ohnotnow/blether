@@ -22,6 +22,7 @@ final class KokoroProvider: Provider, Sendable {
 
     func voices() async throws -> [Voice] {
         await helper.start()
+        try Task.checkCancellation()
         if case .failed(let message) = await helper.state { throw ProviderError.other(message) }
         return await helper.voices.map { Voice(id: $0.id, name: $0.name, language: $0.language) }
     }

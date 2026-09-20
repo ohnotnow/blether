@@ -59,6 +59,8 @@ actor HelperProcess {
     }
 
     /// Spawns (or respawns after a gave-up) and returns once the child is `.ready` or `.failed`.
+    /// A cancelled caller returns early (the child keeps starting); a `try?` around the sleep would
+    /// spin instead, since a cancelled task's sleeps throw at once.
     func start() async {
         if state == .ready { return }
         if state != .starting {
@@ -68,7 +70,7 @@ actor HelperProcess {
             spawn()
         }
         while state == .starting {
-            try? await Task.sleep(for: .milliseconds(50))
+            guard (try? await Task.sleep(for: .milliseconds(50))) != nil else { return }
         }
     }
 
@@ -79,7 +81,7 @@ actor HelperProcess {
         let deadline = ContinuousClock.now + timeout
         while state == .starting {
             if ContinuousClock.now >= deadline { throw HelperError.timedOut }
-            try? await Task.sleep(for: .milliseconds(50))
+            try await Task.sleep(for: .milliseconds(50))
         }
         guard state == .ready, let stdin = live.withLock({ $0.stdin }) else { throw HelperError.notReady }
 
