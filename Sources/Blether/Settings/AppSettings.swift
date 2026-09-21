@@ -44,6 +44,9 @@ final class AppSettings {
         static let trailingSilence = "trailingSilence"
         static let logsContent = "logsContent"
         static let llmHasAnswered = "llmHasAnswered"
+        static let heardWords = "heardWords"
+        static let keepsRecentClips = "keepsRecentClips"
+        static let pronunciations = "pronunciations"
     }
 
     /// The old claude-speaks weighting (English rare, everything else 5), restricted to the languages
@@ -311,6 +314,29 @@ final class AppSettings {
 
     /// Open the microphone when a reply finishes and send what is said to that Claude Code session.
     /// The privacy gate: off by default, and checked at arm time, never cached (blether-UkLWZ.8).
+    /// Off by default: on keeps the last ten spoken clips as files (RecentClips), which puts words on disk.
+    var keepsRecentClips: Bool {
+        get { _ = revision; return defaults.bool(forKey: Key.keepsRecentClips) }
+        set { defaults.set(newValue, forKey: Key.keepsRecentClips); revision += 1 }
+    }
+
+    /// Words the transcriber keeps mishearing, separated by spaces or commas, as typed on the Listening page.
+    var heardWords: String {
+        get { _ = revision; return defaults.string(forKey: Key.heardWords) ?? "" }
+        set { defaults.set(newValue, forKey: Key.heardWords); revision += 1 }
+    }
+
+    /// `heardWords` as the list the corrector wants: trimmed, blanks dropped.
+    var heardWordList: [String] {
+        heardWords.split { $0.isWhitespace || $0 == "," }.map(String.init)
+    }
+
+    /// The Original | Replacement table on the General page, applied to clip text before synthesis.
+    var pronunciations: [Pronunciation] {
+        get { _ = revision; return decode(Key.pronunciations) ?? [] }
+        set { encode(newValue, Key.pronunciations); revision += 1 }
+    }
+
     var listensAfterReply: Bool {
         get { _ = revision; return defaults.bool(forKey: Key.listensAfterReply) }
         set { defaults.set(newValue, forKey: Key.listensAfterReply); revision += 1 }

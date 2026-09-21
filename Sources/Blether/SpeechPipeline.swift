@@ -10,18 +10,28 @@ final class SpeechPipeline: Sendable {
     private let makeLLM: @Sendable @MainActor (AppSettings) -> any LLM
     /// Opens the microphone after a reply when listening is on. nil in tests that do not care.
     private let ears: (any EarsArming)?
+    /// Where spoken clips are copied when "Keep recent clips" is on.
+    private let recent: RecentClips
 
-    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
         self.registry = registry
         self.queue = queue
         self.settings = settings
         self.ears = ears
+        self.recent = recent
         self.makeLLM = makeLLM
     }
 
     /// One provider for everything; the tests and any single-provider caller.
-    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
-        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, ears: ears, makeLLM: makeLLM)
+    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, ears: ears, recent: recent, makeLLM: makeLLM)
+    }
+
+    /// Copies a clip about to be played into the recent folder when the toggle is on. Read at
+    /// delivery, like listening, so flipping it mid-reply wins. A failure is log only.
+    private func keepIfWanted(_ audio: AudioClip, role: Role) async {
+        guard await MainActor.run(body: { settings.keepsRecentClips }) else { return }
+        do { try recent.keep(audio, role: role) } catch { Log.log("recent clips: could not keep \(role.rawValue): \(error)") }
     }
 
     /// Everything read from main-actor state, in one hop, at the moment the reply arrives.
@@ -36,6 +46,7 @@ final class SpeechPipeline: Sendable {
         let provider: any Provider
         let llm: any LLM
         let classifier: (any ToneClassifier)?
+        let pronunciations: [Pronunciation]
     }
 
     /// `profile` is the name from the hook URL; nil, blank or unknown means the default profile.
@@ -60,7 +71,8 @@ final class SpeechPipeline: Sendable {
                 voices: Dictionary(uniqueKeysWithValues: Role.allCases.map { ($0, settings.voiceID(for: $0, in: profile)) }),
                 provider: registry.provider(id: profile.providerID),
                 llm: llm,
-                classifier: classifier(for: settings.toneSource, llm: llm)
+                classifier: classifier(for: settings.toneSource, llm: llm),
+                pronunciations: settings.pronunciations
             )
         }
         let provider = snapshot.provider
@@ -81,8 +93,9 @@ final class SpeechPipeline: Sendable {
         await withTaskGroup(of: (Int, Result<AudioClip, Error>).self) { group in
             for (index, clip) in clips.enumerated() {
                 let voice = snapshot.voices[clip.role] ?? KokoroProvider.defaultVoiceID
+                let spoken = Pronunciations.apply(clip.text, snapshot.pronunciations)
                 group.addTask { [provider] in
-                    do { return (index, .success(try await provider.synthesise(clip.text, voice: voice, language: nil, tone: clip.tone))) }
+                    do { return (index, .success(try await provider.synthesise(spoken, voice: voice, language: nil, tone: clip.tone))) }
                     catch { return (index, .failure(error)) }
                 }
             }
@@ -108,6 +121,7 @@ final class SpeechPipeline: Sendable {
         let history: [String]
         let provider: any Provider
         let llm: any LLM
+        let pronunciations: [Pronunciation]
     }
 
     /// A Notification hook: one short in-character line, dropped rather than queued when audio is
@@ -135,7 +149,8 @@ final class SpeechPipeline: Sendable {
                 languages: NotificationLanguages(parsing: settings.notificationLanguages),
                 history: settings.recentQuips,
                 provider: registry.provider(id: profile.providerID),
-                llm: makeLLM(settings)
+                llm: makeLLM(settings),
+                pronunciations: settings.pronunciations
             )
         }
         guard let snapshot else { return }
@@ -150,12 +165,13 @@ final class SpeechPipeline: Sendable {
 
         let audio: AudioClip
         do {
-            audio = try await provider.synthesise(quip.text, voice: snapshot.voice, language: quip.language, tone: nil)
+            audio = try await provider.synthesise(Pronunciations.apply(quip.text, snapshot.pronunciations), voice: snapshot.voice, language: quip.language, tone: nil)
         } catch {
             Log.log("synthesis failed (\(provider.name), notification): \(error)")
             await MainActor.run { NSSound.beep() }
             return
         }
+        await keepIfWanted(audio, role: .notification)
         await MainActor.run {
             if queue.isPlaying {
                 Log.log("audio started during synthesis, notification dropped")
@@ -195,6 +211,7 @@ final class SpeechPipeline: Sendable {
         }
         switch result {
         case .success(let audio):
+            await keepIfWanted(audio, role: clip.role)
             await queue.enqueue(audio, generation: generation, onFinished: arm)
         case .failure(let error):
             Log.log("synthesis failed (\(provider.name), \(clip.role.rawValue)): \(error)")

@@ -8,6 +8,8 @@ struct GeneralSection: View {
     let speaking: Binding<Bool>
     /// Like speaking: switching listening off must also close an open microphone, so the app hands in its binding.
     let listening: Binding<Bool>
+    /// The Original field of a row just added, so Add puts the cursor where the typing goes.
+    @FocusState private var editingOriginal: UUID?
 
     var body: some View {
         Section {
@@ -22,6 +24,27 @@ struct GeneralSection: View {
                 .lineLimit(3...12)
         } footer: {
             Text("One per line, with a weight after a space, such as French 5. Higher weights are picked more often. The name is sent to the LLM as written.")
+        }
+        Section {
+            ForEach($settings.pronunciations) { $pair in
+                HStack {
+                    TextField("Original", text: $pair.original)
+                        .focused($editingOriginal, equals: pair.id)
+                    TextField("Replacement", text: $pair.replacement)
+                    Button("Delete", role: .destructive) { settings.pronunciations.removeAll { $0.id == pair.id } }
+                        .accessibilityLabel("Delete the pronunciation of \(pair.original)")
+                }
+                .textFieldStyle(.roundedBorder)
+            }
+            Button("Add pronunciation") {
+                let pair = Pronunciation()
+                settings.pronunciations.append(pair)
+                editingOriginal = pair.id
+            }
+        } header: {
+            Text("Pronunciations")
+        } footer: {
+            Text("Words the voice says badly, and what to say instead: kubectl as cube-control, .env as dot-env. Whole words only, any case. The LLM still reads the original.")
         }
         Section("Shortcuts") {
             KeyboardShortcuts.Recorder("Toggle speaking:", name: .toggleSpeaking)
@@ -42,6 +65,14 @@ struct GeneralSection: View {
                 }
             }
             SettingToggle("Log the words too", "Off logs what blether did and how long it took, never what was said. On adds the first line of each reply, preamble and transcript, for debugging.", isOn: $settings.logsContent)
+            SettingToggle("Keep recent clips", "Off keeps nothing. On keeps the last ten clips blether spoke, as files, for showing someone what it does. Never what the microphone heard.", isOn: $settings.keepsRecentClips)
+            LabeledContent("Recent clips") {
+                Button("Open in Finder") {
+                    try? FileManager.default.createDirectory(at: RecentClips.defaultDirectory, withIntermediateDirectories: true)
+                    NSWorkspace.shared.activateFileViewerSelecting([RecentClips.defaultDirectory])
+                }
+                .accessibilityLabel("Open the recent clips folder in Finder")
+            }
         } header: {
             Text("Log")
         } footer: {

@@ -116,6 +116,17 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(self.settings.notificationLanguages, "Glaswegian 3\nEnglish")
     }
 
+    @MainActor func testWordListsStartEmptyAndRoundTrip() {
+        let settings = settings
+        XCTAssertEqual(settings.heardWordList, [])
+        XCTAssertEqual(settings.pronunciations, [])
+        settings.heardWords = " laravel, ,CVE\n"
+        let pair = Pronunciation(original: "kubectl", replacement: "cube-control")
+        settings.pronunciations = [pair]
+        XCTAssertEqual(self.settings.heardWordList, ["laravel", "CVE"])
+        XCTAssertEqual(self.settings.pronunciations, [pair])
+    }
+
     @MainActor func testRememberQuipKeepsTheLastTenOldestFirst() {
         let settings = settings
         XCTAssertEqual(settings.recentQuips, [])

@@ -37,6 +37,11 @@ struct ListeningSection: View {
             Text("How long you can go quiet before blether sends what it heard. Longer if you like to pause while you think, shorter for quick off-the-cuff replies. Arrow keys move it by half a second.")
         }
         Section {
+            TextField("Heard words", text: $settings.heardWords)
+        } footer: {
+            Text("Words the transcriber keeps getting wrong, separated by spaces or commas, such as laravel, livewire, CVE. Anything it hears that is close enough is spelled this way before it is sent. Short words match too easily, so leave them out.")
+        }
+        Section {
             TextField("uv path", text: $settings.uvPath)
             RestartButton()
         } header: {

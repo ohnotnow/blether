@@ -86,6 +86,18 @@ final class EarsTests: XCTestCase {
         XCTAssertFalse(ears.isListening)
     }
 
+    func testHeardWordsCorrectTheTranscriptBeforeDelivery() async {
+        settings.listensAfterReply = true
+        settings.heardWords = "laravel, livewire"
+        transcriber.reply = "use lara vel with livewyre"
+        ears.arm(for: session)
+        await settle()
+        mic.hear(speech, seconds: 1)
+        mic.hear(quiet, seconds: 3)
+        await settle()
+        XCTAssertEqual(delivered.map(\.0), ["use laravel with livewire"])
+    }
+
     func testEmptyTranscriptIsNotDeliveredAndSaysSo() async {
         settings.listensAfterReply = true
         transcriber.reply = "   "

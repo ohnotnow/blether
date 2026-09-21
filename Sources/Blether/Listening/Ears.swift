@@ -95,7 +95,9 @@ final class Ears: EarsArming {
 
     private func transcribe(_ samples: [Float], for session: SessionKey) async {
         do {
-            let text = try await transcriber.transcribe(samples).trimmingCharacters(in: .whitespacesAndNewlines)
+            let heard = try await transcriber.transcribe(samples).trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = WordCorrector.correct(heard, words: settings.heardWordList)
+            if text != heard { Log.log("ears: corrected \(Log.content(heard)) to \(Log.content(text))") }
             guard !text.isEmpty else {
                 Log.log("ears: heard nothing worth sending")
                 sounds.play(.cancelled)

@@ -95,14 +95,18 @@ final class SpeechPipelineTests: XCTestCase {
 
     override func tearDown() {
         UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
+        try? FileManager.default.removeItem(at: recentDirectory)
     }
 
     private let ears = FakeEars()
     private let session = SessionKey(id: "s-1", pid: 77)
 
+    private let recentDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("blether-pipeline-recent-\(UUID().uuidString)", isDirectory: true)
+    private var recentNames: [String] { (try? FileManager.default.contentsOfDirectory(atPath: recentDirectory.path).sorted()) ?? [] }
+
     private func pipeline(provider: (any Provider)? = nil) -> SpeechPipeline {
         let llm = llm
-        return SpeechPipeline(provider: provider ?? self.provider, queue: queue, settings: settings, ears: ears) { [weak self] _ in
+        return SpeechPipeline(provider: provider ?? self.provider, queue: queue, settings: settings, ears: ears, recent: RecentClips(directory: recentDirectory)) { [weak self] _ in
             MainActor.assumeIsolated { self?.makeLLMCalls += 1 }
             return llm
         }
@@ -152,6 +156,34 @@ final class SpeechPipelineTests: XCTestCase {
         await pipeline().speak(long)
         drainQueue()
         XCTAssertEqual(ears.armed, [])
+    }
+
+    func testPronunciationsChangeWhatIsSpokenButNotWhatTheLLMReads() async {
+        settings.pronunciations = [Pronunciation(original: "claude", replacement: "clawed")]
+        llm.preambleScript = { _ in "Claude again" }
+        llm.summaryScript = { _ in "Ask claude, not Claude's kid." }
+        await pipeline().speak("Claude says " + long)
+        XCTAssertEqual(Set(provider.calls.map(\.text)), ["clawed again ...", "Ask clawed, not clawed's kid."], "possessives count as the word")
+        XCTAssertTrue(llm.calls.allSatisfy { $0.user.contains("Claude") && !$0.user.contains("clawed") })
+    }
+
+    func testRecentClipsAreKeptOnlyWhenTheToggleIsOn() async {
+        await pipeline().speak(long)
+        XCTAssertEqual(recentNames, [], "off by default")
+
+        drainQueue()
+        settings.keepsRecentClips = true
+        await pipeline().speak(long)
+        drainQueue()
+        await pipeline().quip()
+        XCTAssertEqual(Set(recentNames.map { String($0.dropFirst(20)) }), ["preamble.caf", "reply.caf", "notification.caf"])
+    }
+
+    func testPronunciationsApplyToTheQuipToo() async {
+        settings.pronunciations = [Pronunciation(original: "id", replacement: "I.D")]
+        llm.quipScript = { _ in "Your id, please." }
+        await pipeline().quip()
+        XCTAssertEqual(provider.calls.map(\.text), ["Your I.D, please."])
     }
 
     func testIdleQueuePlaysPreambleThenMainInTheirOwnVoices() async {
