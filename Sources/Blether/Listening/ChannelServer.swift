@@ -20,7 +20,9 @@ final class ChannelServer: @unchecked Sendable {
         AskUserQuestion tool while this channel is in use; dialogs block until someone reaches a keyboard, \
         and voice replies queue behind them. The `handsfree` tool turns listening on or off: use it when \
         the user asks to go hands-free (or to stop), and report what it returns so they know whether the \
-        microphone will actually open after your replies.
+        microphone will actually open after your replies. The `heard_words` tool adds a word the \
+        transcriber keeps mishearing to blether's correction list: use it only when the user says a word \
+        was misheard, never on your own guess, and read its description for what it can and cannot fix.
         """
 
     /// A JSON-RPC request id, which the spec allows to be a number or a string. Kept as a Sendable
@@ -41,10 +43,13 @@ final class ChannelServer: @unchecked Sendable {
 
     /// The `handsfree` tool: on, off or status in; one human line back, delivered on the server's queue.
     typealias Handsfree = @Sendable (_ action: String, _ reply: @escaping @Sendable (String) -> Void) -> Void
+    /// The `heard_words` tool: add or list, with the words to add; one human line back, same as handsfree.
+    typealias HeardWords = @Sendable (_ action: String, _ words: [String], _ reply: @escaping @Sendable (String) -> Void) -> Void
 
     private let queue = DispatchQueue(label: "uk.ohnotnow.blether.channel-server")
     private let requestedPort: UInt16
     private let handsfree: Handsfree
+    private let heardWords: HeardWords
     private var listener: NWListener?
     private var readyPort: UInt16?
     private var connections: [UUID: Connection] = [:]
@@ -53,9 +58,10 @@ final class ChannelServer: @unchecked Sendable {
     var boundPort: UInt16? { queue.sync { readyPort } }
     var sessionCount: Int { queue.sync { registry.count } }
 
-    init(port: UInt16 = ChannelServer.defaultPort, handsfree: @escaping Handsfree) {
+    init(port: UInt16 = ChannelServer.defaultPort, handsfree: @escaping Handsfree, heardWords: @escaping HeardWords) {
         requestedPort = port
         self.handsfree = handsfree
+        self.heardWords = heardWords
     }
 
     func start() throws {
@@ -216,21 +222,25 @@ final class ChannelServer: @unchecked Sendable {
                 "instructions": Self.instructions,
             ], on: connection)
         case "tools/list":
-            respond(id, result: ["tools": [Self.handsfreeTool()]], on: connection)
+            respond(id, result: ["tools": [Self.handsfreeTool(), Self.heardWordsTool()]], on: connection)
         case "tools/call":
             let params = message["params"] as? [String: Any]
-            guard params?["name"] as? String == "handsfree" else {
-                respond(id, error: (-32602, "unknown tool"), on: connection)
-                return
-            }
-            let action = ((params?["arguments"] as? [String: Any])?["action"] as? String) ?? "status"
+            let arguments = params?["arguments"] as? [String: Any]
             let connectionID = connection.id
             let queue = queue
-            handsfree(action) { [weak self] text in
+            let reply: @Sendable (String) -> Void = { [weak self] text in
                 queue.async { [weak self] in
                     guard let self, let connection = self.connections[connectionID] else { return }
                     self.respond(id, result: ["content": [["type": "text", "text": text]]], on: connection)
                 }
+            }
+            switch params?["name"] as? String {
+            case "handsfree":
+                handsfree(arguments?["action"] as? String ?? "status", reply)
+            case "heard_words":
+                heardWords(arguments?["action"] as? String ?? "list", arguments?["words"] as? [String] ?? [], reply)
+            default:
+                respond(id, error: (-32602, "unknown tool"), on: connection)
             }
         case "ping":
             respond(id, result: [:], on: connection)
@@ -255,6 +265,19 @@ final class ChannelServer: @unchecked Sendable {
         "inputSchema": [
             "type": "object",
             "properties": ["action": ["type": "string", "enum": ["on", "off", "status"], "description": "on: listen after replies; off: stop; status: report only."]],
+            "required": ["action"],
+        ],
+    ] }
+
+    private static func heardWordsTool() -> [String: Any] { [
+        "name": "heard_words",
+        "description": "Add words the speech-to-text keeps mishearing to blether's correction list, or list it. After each transcription blether swaps anything close in spelling or sound for a listed word, so it fixes \"lara vel\" or \"larravel\" to \"laravel\" and \"live wire\" to \"livewire\". It cannot fix a wild miss (\"daughter\" for \"env\"); that needs the user to say the word differently. Words under three letters are refused: they match too easily. Only add a word the user has said was misheard.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "action": ["type": "string", "enum": ["add", "list"], "description": "add: append the words; list: report the current list."],
+                "words": ["type": "array", "items": ["type": "string"], "description": "The correctly spelled words to add, for add."],
+            ],
             "required": ["action"],
         ],
     ] }

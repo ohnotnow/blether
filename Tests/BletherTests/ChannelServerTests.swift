@@ -84,10 +84,13 @@ final class ChannelServerTests: XCTestCase {
 
     override func setUpWithError() throws {
         let calls = handsfreeCalls
-        server = ChannelServer(port: 0) { action, reply in
+        server = ChannelServer(port: 0, handsfree: { action, reply in
             calls.record(action)
             reply("Listening after replies is \(action == "off" ? "off" : "on").")
-        }
+        }, heardWords: { action, words, reply in
+            calls.record("heard_words \(action) \(words.joined(separator: ","))")
+            reply("Heard words: \(words.joined(separator: ", ")).")
+        })
         try server.start()
     }
 
@@ -130,7 +133,7 @@ final class ChannelServerTests: XCTestCase {
         client.send(json: ["jsonrpc": "2.0", "id": 1, "method": "tools/list"])
         let list = try await client.next()
         let tools = (list["result"] as? [String: Any])?["tools"] as? [[String: Any]]
-        XCTAssertEqual(tools?.map { $0["name"] as? String }, ["handsfree"])
+        XCTAssertEqual(tools?.map { $0["name"] as? String }, ["handsfree", "heard_words"])
 
         client.send(json: ["jsonrpc": "2.0", "id": "req-2", "method": "tools/call", "params": ["name": "handsfree", "arguments": ["action": "on"]]])
         let call = try await client.next()
@@ -138,6 +141,20 @@ final class ChannelServerTests: XCTestCase {
         let content = (call["result"] as? [String: Any])?["content"] as? [[String: Any]]
         XCTAssertEqual(content?.first?["text"] as? String, "Listening after replies is on.")
         XCTAssertEqual(handsfreeCalls.all, ["on"])
+    }
+
+    func testHeardWordsToolReachesItsClosureWithTheWords() async throws {
+        let (client, _) = try await connectAndInitialise(sessionID: "s-1", pid: 11)
+        defer { client.close() }
+        client.send(json: ["jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": ["name": "heard_words", "arguments": ["action": "add", "words": ["laravel", "livewire"]]]])
+        let call = try await client.next()
+        let content = (call["result"] as? [String: Any])?["content"] as? [[String: Any]]
+        XCTAssertEqual(content?.first?["text"] as? String, "Heard words: laravel, livewire.")
+        XCTAssertEqual(handsfreeCalls.all, ["heard_words add laravel,livewire"])
+
+        client.send(json: ["jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": ["name": "nonsense", "arguments": [:]]])
+        let unknown = try await client.next()
+        XCTAssertEqual((unknown["error"] as? [String: Any])?["code"] as? Int, -32602)
     }
 
     func testDeliverWritesTheChannelNotificationToTheMatchingSession() async throws {

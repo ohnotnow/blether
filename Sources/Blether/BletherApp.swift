@@ -21,9 +21,11 @@ struct BletherApp: App {
         let queue = PlaybackQueue()
         let registry = Self.makeRegistry(settings: settings, state: state)
         let ears = Self.makeEars(settings: settings, state: state)
-        let channel = ChannelServer { action, reply in
+        let channel = ChannelServer(handsfree: { action, reply in
             Task { @MainActor in reply(Self.handsfree(action, settings: settings, state: state, ears: ears)) }
-        }
+        }, heardWords: { action, words, reply in
+            Task { @MainActor in reply(HeardWordsTool.run(action, words: words, settings: settings)) }
+        })
         ears.deliver = Self.deliverer(channel: channel, state: state)
         let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings, ears: ears) { settings in
             let client = ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
