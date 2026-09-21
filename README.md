@@ -162,7 +162,7 @@ Out of the box the LLM is [Ollama](https://ollama.com) at
 Ollama is not running you still hear the reply, prefixed with a heads-up
 that the LLM fell over. To use something else, open "Settings..." from the
 menubar, go to the LLM page, pick a preset, paste its key, and switch on
-"Use this provider". Looking at a provider does not switch to it.
+"Use this provider".
 
 With Ollama and a reasoning model, put this in the Advanced group's extra
 request body, otherwise a 40-word summary can take a minute of hidden
@@ -247,6 +247,8 @@ Then start each session you want to talk to with the channel flag:
 
 ```sh
 claude --dangerously-load-development-channels server:blether
+# or add a shell alias to your ~/.bashrc or ~/.zshrc if you use the listen feature a lot
+alias claudel="claude --dangerously-load-development-channels server:blether"
 ```
 
 Claude Code shows a warning about development channels every
