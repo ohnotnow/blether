@@ -36,6 +36,8 @@ The name is Scots for a long chatty back-and-forth.
 - Optional listening: when a reply finishes, the microphone opens, you
   answer, and your words land in the Claude Code session that spoke.
   Transcription is on-device.
+- Two word lists: words the transcriber keeps mishearing, and words the
+  voice mispronounces with what to say instead.
 
 ## Providers
 
@@ -205,6 +207,15 @@ and xAI sound the same either way. The preamble is not affected. Choose the
 classifier in the Tone group on the LLM page. If it fails, the reply is
 spoken neutral and the log says why.
 
+## Pronunciations
+
+The voices say some words badly: "kubectl", ".env", "sqlite". The
+Pronunciations table on the General page pairs each with what to say
+instead, such as "cube-control", "dot-env" and "sequel-lite". The swap
+happens just before synthesis, on whole words in any case, and the LLM
+still reads the original, so a persona told to say "clawed" for "claude"
+does not get confused about who it is.
+
 ## Remote mode
 
 Claude Code on another machine can send its replies here to be spoken, each
@@ -234,6 +245,17 @@ asks once for microphone permission. English only for now.
 The preamble is skipped while listening is on. You can also just say "go
 hands-free" or "stop listening" to Claude and it will use the MCP to toggle it.
 
+### Heard words
+
+The transcriber is good at English and poor at names: "laravel" comes out
+as "lara vel", "livewire" as "live wire". Put the words it keeps getting
+wrong in "Heard words" on the Listening page, separated by spaces or
+commas. Anything heard that is close enough in spelling or sound is
+spelled the listed way before it is sent. Short words match too easily,
+so leave them out. You can also tell Claude "add fluxui to the heard
+words" and it will do it through the channel, so the word is not
+forgotten by the time you open Settings.
+
 ## Install the channel
 
 Your words reach a session through [Claude Code's channels research
@@ -255,7 +277,7 @@ Claude Code shows a warning about development channels every
 launch (choose "I am using this for local development"), and asks once per
 project before using a new MCP server. The flag is not in `claude --help`
 while channels are in preview, but it works. `/mcp` in the session should
-list blether with its one tool. Some organisation accounts have channels
+list blether with its two tools, `handsfree` and `heard_words`. Some organisation accounts have channels
 switched off; if the flag is refused, that is why.
 
 If you quit or relaunch Blether, every session's connection to it closes:
@@ -280,6 +302,11 @@ General page drop just the preamble or just the reply.
 Blether writes one line per event to `~/Library/Logs/blether.log`. The
 words themselves are not logged unless you switch on "Log the words too"
 on the General page.
+
+"Keep recent clips", on the same page and off by default, keeps the last
+ten clips Blether spoke as files, named by time and role, for playing to
+someone who wants to hear what it does. "Open in Finder" takes you to
+them. It never keeps what the microphone heard.
 
 ## Going deeper
 

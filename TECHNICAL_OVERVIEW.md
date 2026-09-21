@@ -30,11 +30,18 @@ Everything is wired together at launch in `Sources/Blether/BletherApp.swift`.
    picking the styled variant of the voice, OpenAI by a delivery
    instruction. The other providers ignore it. Only the reply clip is
    coloured.
-5. The profile's provider renders each line to audio. API providers are
+5. `Speech/Pronunciations` swaps each clip's text for its phonetic
+   spellings (below). The planner and the LLM never see the swapped text.
+6. The profile's provider renders each line to audio. API providers are
    capped at 800 characters after compression, Kokoro at 3000, because the
    API providers bill per character.
-6. Clips join `PlaybackQueue` and play in order. Stop kills the current clip
+7. Clips join `PlaybackQueue` and play in order. Stop kills the current clip
    and drops the queue. With listening on, stop skips straight to the mic.
+   With "Keep recent clips" on, `Speech/RecentClips` copies each clip to
+   `~/Library/Application Support/blether/recent` first, as
+   `<yyyy-MM-dd HH.mm.ss> <role>.<ext>` (a taken name gets a number),
+   and drops the oldest beyond ten. The queue deletes the original after
+   playing, as ever.
 
 A Notification hook event goes through `Speech/QuipPlanner` instead: one
 short in-character line, in a language picked by weighted random from the
@@ -43,6 +50,18 @@ is already playing the quip is dropped, and if the LLM fails you hear a
 beep.
 
 Prompts are Swift constants in `Speech/Prompts.swift`.
+
+### Pronunciations
+
+The Original | Replacement table on the General page is `[Pronunciation]`
+in settings. `Pronunciations.apply` runs each pair in list order as a
+case-insensitive regular expression: the original, escaped, preceded by
+the start of the text or whitespace and followed by the end, whitespace or
+punctuation. The boundary is whitespace rather than `\b` so entries that
+begin with a dot (".env", ".gitignore") match; the old Python version used
+`\b` and those never fired. Possessives count as the word, so "Claude's"
+becomes "clawed's", which is what a voice wants. A port of
+`apply_word_replacements` from claude-speaks.
 
 ## The LLM
 
@@ -143,12 +162,47 @@ The ears are Swift, in `Sources/Blether/Listening/`, one file per idea.
   compiles its kernels; after that the ears are ready in well under a
   second. English only for now.
 - `Ears` owns the one recording that may be live, the listening switch,
-  and a deliver closure that gets the text plus the session key.
+  and a deliver closure that gets the text plus the session key. Before
+  delivery the transcript goes through `WordCorrector` (below).
 
 The mic is turned on by `PlaybackQueue.enqueue(onFinished:)` on a reply's
 last clip. The handler waits until nothing else is playing, and `stop()`
 fires it too. If two replies finish back to back, the first gets the mic
 and the other is logged and skipped.
+
+### Heard words
+
+Canary offers no vocabulary biasing (transcribe.cpp's `initialPrompt` is
+Whisper only), so mishearings are fixed after the fact, the way Handy does
+it. `Listening/WordCorrector` is a port of Handy's `apply_custom_words`,
+pure, with Levenshtein and Soundex written inline:
+
+- Each transcript token and each listed word is reduced to a match key,
+  lowercase ASCII alphanumerics, so "Charge B," and "ChargeBee" compare as
+  `chargeb` and `chargebee`. Non-ASCII words in the list are skipped.
+- The transcript is walked with windows of three, two and one tokens,
+  never crossing punctuation inside the window, and the closest match
+  across the sizes wins. That is how "live wire" becomes "livewire".
+- The score is edit distance over the longer length. Pairs whose lengths
+  differ by more than a quarter (or two characters) are skipped, so
+  "openaigpt" cannot match "openai". When both are alphabetic and share a
+  Soundex code the score is multiplied by 0.3. Anything under 0.18,
+  Handy's default, is accepted: one letter out in an eight-letter word,
+  or about four when the two sound alike.
+- The replacement keeps the window's leading and trailing punctuation and
+  the case pattern of the first token.
+
+The threshold is not adjustable. One consequence, kept on purpose and
+tested: a listed two-letter word swallows its soundalikes, "id" turns "it"
+into "id", because one letter out of two is forgiven by the Soundex bonus.
+So the Listening page warns off short words and the `heard_words` channel
+tool refuses anything under three letters. A wild miss ("daughter" for
+"env") is beyond fuzzy matching; the fix is saying the word differently.
+
+The list is `heardWords` in settings, one string, split on whitespace and
+commas. `Listening/HeardWordsTool` is the channel tool behind it: `add`
+trims, dedupes case-insensitively, refuses short words by name and always
+replies with the whole list; `list` just replies.
 
 ### Canary and transcribe.cpp
 
@@ -180,10 +234,13 @@ The first line is the **session key**: the session id and the Claude Code
 pid. (`$PPID` inside the hook or the MCP command is Claude Code itself,
 because both run under `sh` whose parent is Claude Code.) After that line
 the connection is plain JSON-RPC, handled by hand in
-`Listening/ChannelServer.swift`: the MCP handshake, one tool (`handsfree`,
-which flips the listening switch), and instructions telling Claude that
-channel events are the user speaking and to prefer plain questions over
-dialogs while the mic is in use.
+`Listening/ChannelServer.swift`: the MCP handshake, two tools (`handsfree`,
+which flips the listening switch, and `heard_words`, which adds to or lists
+the mishearing list), and instructions telling Claude that channel events
+are the user speaking, to prefer plain questions over dialogs while the
+mic is in use, and to add a heard word only when the user says one was
+misheard. The `heard_words` description says what the corrector can and
+cannot fix, so Claude knows when reaching for it is pointless.
 
 A transcript is delivered as a `notifications/claude/channel` message on
 the connection whose session key matches the reply's hook.
@@ -208,7 +265,8 @@ claude-speaks `remote-hook.py` sends is accepted and ignored.
 `personas`, `profiles`, `defaultProfileID`, `isEnabled`, `speaksPreamble`,
 `speaksMainReply`, `speaksNotifications`, `notificationLanguages`,
 `recentQuips`, `toneSource`, `listensOnLAN`, `listensAfterReply`,
-`microphoneID`, `uvPath`, and the two shortcuts under
+`microphoneID`, `uvPath`, `heardWords`, `pronunciations`,
+`keepsRecentClips`, and the two shortcuts under
 `KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. An
 older `roles` key is read once to seed the Default profile and never
 written again. The LLM key, the provider keys and the Jev key are in
@@ -230,6 +288,9 @@ anything that failed. Lines that would carry spoken or heard words go
 through `Log.content`, which shows a character count unless "Log the words
 too" is on. When the file passes 5 MB at launch it is renamed
 `blether.log.1`. Console.app shows it too.
+
+When a heard word changed a transcript the log says so, both versions
+through `Log.content`.
 
 If a recording transcribes to nothing, the log says "heard nothing worth
 sending" and the audio is kept at `~/Library/Logs/blether-last-empty.wav`
