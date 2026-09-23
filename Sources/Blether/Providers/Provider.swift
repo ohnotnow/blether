@@ -28,8 +28,12 @@ protocol Provider: Sendable {
     /// A paragraph appended to the summary prompt naming the inline tags this provider's synthesis
     /// understands (ElevenLabs audio tags, xAI prosody tags). nil means plain text only.
     var markupHint: String? { get }
+    /// True for a provider slower than real time: the reply is split into sentence chunks, made one
+    /// at a time in order, so the first plays while the rest are made (blether-vNbF9).
+    var speaksInChunks: Bool { get }
 }
 
 extension Provider {
     var markupHint: String? { nil }
+    var speaksInChunks: Bool { false }
 }

@@ -7,6 +7,8 @@ final class BreezeProvider: Provider, Sendable {
     let name = "breeze"
     /// The user's decision (blether-FGSKN): Kokoro's 3000 would be minutes of generating at Better.
     let maxMainCharacters = 800
+    /// A 40 s reply takes 40 s or more to make; in chunks the first sentence plays after a few (blether-vNbF9).
+    let speaksInChunks = true
 
     private let helper: HelperProcess
     private let settings: @Sendable () -> [VoiceDesign]

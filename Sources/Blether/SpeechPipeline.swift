@@ -89,15 +89,27 @@ final class SpeechPipeline: Sendable {
             classifier: snapshot.classifier
         )
 
+        let synthesise: @Sendable (PlannedClip) async -> Result<AudioClip, Error> = { [provider] clip in
+            let voice = snapshot.voices[clip.role] ?? KokoroProvider.defaultVoiceID
+            let spoken = Pronunciations.apply(clip.text, snapshot.pronunciations)
+            do { return .success(try await provider.synthesise(spoken, voice: voice, language: nil, tone: clip.tone)) }
+            catch { return .failure(error) }
+        }
+
+        // One at a time, in order: the helper is serial anyway, and the first chunk must go first.
+        if provider.speaksInChunks {
+            let chunked = Self.chunked(clips)
+            for (index, clip) in chunked.enumerated() {
+                let isLast = index == chunked.count - 1
+                await deliver(clip, await synthesise(clip), generation: snapshot.generation, provider: provider, armAfter: isLast ? session : nil)
+            }
+            return
+        }
+
         // Synthesise concurrently, but hand clips to the queue in planned order as each becomes ready.
         await withTaskGroup(of: (Int, Result<AudioClip, Error>).self) { group in
             for (index, clip) in clips.enumerated() {
-                let voice = snapshot.voices[clip.role] ?? KokoroProvider.defaultVoiceID
-                let spoken = Pronunciations.apply(clip.text, snapshot.pronunciations)
-                group.addTask { [provider] in
-                    do { return (index, .success(try await provider.synthesise(spoken, voice: voice, language: nil, tone: clip.tone))) }
-                    catch { return (index, .failure(error)) }
-                }
+                group.addTask { (index, await synthesise(clip)) }
             }
             var ready: [Int: Result<AudioClip, Error>] = [:]
             var next = 0
@@ -109,6 +121,17 @@ final class SpeechPipeline: Sendable {
                     next += 1
                 }
             }
+        }
+    }
+
+    /// The reply clip split into sentence chunks, each keeping its role and tone; the preamble is left whole.
+    static func chunked(_ clips: [PlannedClip]) -> [PlannedClip] {
+        clips.flatMap { clip -> [PlannedClip] in
+            guard clip.role == .main else { return [clip] }
+            let chunks = ReplyChunker.split(clip.text)
+            guard !chunks.isEmpty else { return [clip] }
+            if chunks.count > 1 { Log.log("reply in \(chunks.count) chunks") }
+            return chunks.map { PlannedClip(text: $0, role: .main, tone: clip.tone) }
         }
     }
 

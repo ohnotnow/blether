@@ -7,10 +7,12 @@ private final class RecordingProvider: Provider, @unchecked Sendable {
     let name: String
     let maxMainCharacters: Int
     let markupHint: String?
-    init(name: String = "recording", maxMainCharacters: Int = 800, markupHint: String? = nil) {
+    let speaksInChunks: Bool
+    init(name: String = "recording", maxMainCharacters: Int = 800, markupHint: String? = nil, speaksInChunks: Bool = false) {
         self.name = name
         self.maxMainCharacters = maxMainCharacters
         self.markupHint = markupHint
+        self.speaksInChunks = speaksInChunks
     }
     private let lock = NSLock()
     private var recorded: [Call] = []
@@ -345,6 +347,41 @@ final class SpeechPipelineTests: XCTestCase {
         let main = second.calls.first { $0.voice == "v-main" }
         XCTAssertLessThanOrEqual(main!.text.count, 21, "capped at the second provider's 20 plus the ellipsis")
         XCTAssertTrue(llm.calls.first { $0.system.contains("Compress") }!.system.hasSuffix("You may use [sigh]."))
+    }
+
+    // MARK: - Chunks (blether-vNbF9)
+
+    func testAChunkingProviderSpeaksTheReplyInOrderedChunksAndArmsAfterTheLast() async {
+        settings.listensAfterReply = true
+        settings.speaksPreamble = false
+        let chunking = RecordingProvider(speaksInChunks: true)
+        llm.summaryScript = { _ in "First paragraph.\n\nSecond one." }
+        await pipeline(provider: chunking).speak(long, session: session)
+
+        XCTAssertEqual(chunking.calls.map(\.text), ["First paragraph.", "Second one."])
+        XCTAssertEqual(chunking.calls.map(\.voice), ["v-main", "v-main"])
+        XCTAssertEqual(players.map(\.url), [chunking.calls[0].url])
+        players[0].finish()
+        XCTAssertEqual(ears.armed, [], "not after the first chunk")
+        XCTAssertEqual(players.map(\.url), chunking.calls.map(\.url))
+        players[1].finish()
+        XCTAssertEqual(ears.armed, [session])
+    }
+
+    func testOtherProvidersKeepTheReplyWhole() async {
+        settings.speaksPreamble = false
+        llm.summaryScript = { _ in "First paragraph.\n\nSecond one." }
+        await pipeline().speak(long)
+        XCTAssertEqual(provider.calls.map(\.text), ["First paragraph.\n\nSecond one."])
+    }
+
+    func testChunksKeepTheReplyToneAndThePreambleStaysWhole() {
+        let clips = [PlannedClip(text: "Oh. Joy.", role: .monologue), PlannedClip(text: "One.\nTwo.", role: .main, tone: .sarcasm)]
+        XCTAssertEqual(SpeechPipeline.chunked(clips), [
+            PlannedClip(text: "Oh. Joy.", role: .monologue),
+            PlannedClip(text: "One.", role: .main, tone: .sarcasm),
+            PlannedClip(text: "Two.", role: .main, tone: .sarcasm),
+        ])
     }
 
     // MARK: - Tone
