@@ -26,6 +26,8 @@ final class AppSettings {
         static let llmModel = "llmModel"
         static let llmExtraBody = "llmExtraBody"
         static let personas = "personas"
+        static let voiceDesigns = "voiceDesigns"
+        static let breezeQuality = "breezeQuality"
         /// Pre-profile installs stored one set of roles here. Read once to seed the Default profile, never written again.
         static let roles = "roles"
         static let profiles = "profiles"
@@ -65,6 +67,8 @@ final class AppSettings {
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let keychain: KeychainStore
+    /// The same store for `breezeReader`. UserDefaults is documented thread-safe but not marked Sendable.
+    @ObservationIgnored private nonisolated let sharedDefaults: SharedDefaults
 
     /// @Observable tracks stored properties only, and everything below is computed over
     /// `defaults`. Every setter bumps this and every getter reads it, so SwiftUI re-renders.
@@ -73,6 +77,7 @@ final class AppSettings {
     init(defaults: UserDefaults = .standard, keychain: KeychainStore = KeychainStore()) {
         self.defaults = defaults
         self.keychain = keychain
+        sharedDefaults = SharedDefaults(defaults: defaults)
     }
 
     /// Compatible by default, so an install from before presets keeps its Ollama.
@@ -127,6 +132,17 @@ final class AppSettings {
     var personas: [Persona] {
         get { _ = revision; return decode(Key.personas) ?? [Persona.marvin] }
         set { encode(newValue, Key.personas); revision += 1 }
+    }
+
+    /// Breeze's voice designs. The four defaults until something is stored; an empty list stays empty.
+    var voiceDesigns: [VoiceDesign] {
+        get { _ = revision; return Self.voiceDesigns(in: defaults) }
+        set { encode(newValue, Key.voiceDesigns); revision += 1 }
+    }
+
+    var breezeQuality: BreezeQuality {
+        get { _ = revision; return Self.breezeQuality(in: defaults) }
+        set { defaults.set(newValue.rawValue, forKey: Key.breezeQuality); revision += 1 }
     }
 
     /// Never empty. An install from before profiles gets its old roles as a "Default" profile, and a
@@ -373,6 +389,26 @@ final class AppSettings {
         ))
     }
 
+    /// Trims both strings and appends under a fresh id, like `addPersona`.
+    func addVoiceDesign(name: String, description: String) {
+        voiceDesigns.append(VoiceDesign(
+            id: UUID().uuidString,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines)
+        ))
+    }
+
+    /// Replaces the design with the same id. An unknown id is a no-op.
+    func updateVoiceDesign(_ design: VoiceDesign) {
+        guard let index = voiceDesigns.firstIndex(where: { $0.id == design.id }) else { return }
+        voiceDesigns[index] = design
+    }
+
+    /// Profiles are left alone: a role still naming the deleted design speaks with the first one.
+    func deleteVoiceDesign(id: String) {
+        voiceDesigns.removeAll { $0.id == id }
+    }
+
     /// Replaces the persona with the same id. An unknown id is a no-op.
     func updatePersona(_ persona: Persona) {
         guard let index = personas.firstIndex(where: { $0.id == persona.id }) else { return }
@@ -441,6 +477,23 @@ final class AppSettings {
         }
     }
 
+    /// Breeze's designs and quality for the provider to read from any thread at synthesis time, so an
+    /// edit in Settings is heard on the next clip. UserDefaults is thread-safe; see `apiKeyReader`.
+    nonisolated func breezeReader() -> @Sendable () -> (designs: [VoiceDesign], quality: BreezeQuality) {
+        let shared = sharedDefaults
+        return { (Self.voiceDesigns(in: shared.defaults), Self.breezeQuality(in: shared.defaults)) }
+    }
+
+    private nonisolated static func voiceDesigns(in defaults: UserDefaults) -> [VoiceDesign] {
+        guard let data = defaults.data(forKey: Key.voiceDesigns),
+              let designs = try? JSONDecoder().decode([VoiceDesign].self, from: data) else { return VoiceDesign.defaults }
+        return designs
+    }
+
+    private nonisolated static func breezeQuality(in defaults: UserDefaults) -> BreezeQuality {
+        defaults.string(forKey: Key.breezeQuality).flatMap(BreezeQuality.init(rawValue:)) ?? .better
+    }
+
     /// What an install from before profiles becomes: its stored roles, or the defaults, as "Default".
     private func migratedProfile() -> Profile {
         var roles = Self.defaultRoles()
@@ -475,4 +528,8 @@ final class AppSettings {
     private func encode<T: Encodable>(_ value: T, _ key: String) {
         defaults.set(try? JSONEncoder().encode(value), forKey: key)
     }
+}
+
+private struct SharedDefaults: @unchecked Sendable {
+    let defaults: UserDefaults
 }

@@ -46,6 +46,7 @@ Text-to-speech, pick one per profile:
 | Provider | Needs | Notes |
 |---|---|---|
 | [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-bf16) | Nothing - runs on-device | Default. English, French, Spanish, Italian, Portuguese, Hindi, Chinese |
+| [Breeze-TTS-2](https://huggingface.co/mlx-community/Breeze-TTS-2-mlx-4bit) | A fast Mac - runs on-device | Voices you describe in words. Non-commercial licence, see below |
 | ElevenLabs | API key | Lists your account's voices |
 | OpenAI | API key | Fixed voice list |
 | xAI | API key | Lists your account's voices |
@@ -202,10 +203,35 @@ string to paste under each profile.
 
 Off by default. Switched on, Blether works out the mood of each reply and
 the voice matches it where the provider can: Mistral by picking the styled
-variant of the voice, OpenAI by a delivery instruction. Kokoro, ElevenLabs
-and xAI sound the same either way. The preamble is not affected. Choose the
+variant of the voice, OpenAI by a delivery instruction. Kokoro, ElevenLabs,
+xAI and Breeze sound the same either way. The preamble is not affected. Choose the
 classifier in the Tone group on the LLM page. If it fails, the reply is
 spoken neutral and the log says why.
+
+## Breeze
+
+Breeze-TTS-2 builds a voice from a written description, such as "Female,
+late twenties, Danish-accented English. Slightly dusky, low alto.
+Hesitant, thoughtful delivery with small pauses." Blether ships four of
+these voice designs; add and edit your own under Settings > TTS Providers,
+then pick one per role in a profile like any other voice. The more the
+description says about the voice itself (sex, age, accent, pitch,
+texture, pace), the more it sounds like the same person from clip to clip.
+
+It needs a fast Mac. On an M1 it made speech four to eight times slower
+than it plays; on an M6 it keeps up at the Faster quality setting and
+takes about twice as long as the speech at Better. Kokoro is much quicker
+on any Mac. A long reply is cut shorter for Breeze than for Kokoro so the
+wait stays around a minute at most.
+
+Like Kokoro it runs through uv. It only starts once a profile uses it,
+and the first time it downloads about 2.3 GB; the menubar says "Breeze:
+warming up" meanwhile.
+
+The model is under the BreezeBlue Research and Non-Commercial licence (see
+the [model page](https://huggingface.co/mlx-community/Breeze-TTS-2-mlx-4bit)).
+Blether's MIT licence does not change that: Breeze is for research and
+non-commercial use only.
 
 ## Pronunciations
 
@@ -326,6 +352,9 @@ Blether stands on other people's open source work:
 - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), the default
   local text-to-speech model, run through
   [mlx-audio](https://github.com/Blaizzy/mlx-audio). Apache-2.0.
+- [Breeze-TTS-2](https://huggingface.co/BreezeBlue/Breeze-TTS-2), the
+  local model that speaks voice designs, as the 4-bit MLX conversion,
+  also through mlx-audio. BreezeBlue Research and Non-Commercial licence.
 
 ## Licence
 

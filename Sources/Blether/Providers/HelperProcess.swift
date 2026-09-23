@@ -77,7 +77,8 @@ actor HelperProcess {
     /// Sends one request and waits for its reply. Waits through `.starting` (warm-up, first-run model
     /// download, respawn) bounded by `timeout`; only `.failed` throws `.notReady` at once.
     /// `lang` is Kokoro's code for the language of the text; nil leaves the helper's default (British English).
-    func request(text: String, voice: String, out: URL, lang: String? = nil, timeout: Duration) async throws {
+    /// `instruct` and `cfg` are Breeze's voice design and quality; Kokoro never sends them.
+    func request(text: String, voice: String, out: URL, lang: String? = nil, instruct: String? = nil, cfg: Double? = nil, timeout: Duration) async throws {
         let deadline = ContinuousClock.now + timeout
         while state == .starting {
             if ContinuousClock.now >= deadline { throw HelperError.timedOut }
@@ -86,7 +87,7 @@ actor HelperProcess {
         guard state == .ready, let stdin = live.withLock({ $0.stdin }) else { throw HelperError.notReady }
 
         let id = UUID().uuidString
-        let line = try JSONEncoder().encode(Request(id: id, text: text, voice: voice, out: out.path, lang: lang)) + Data("\n".utf8)
+        let line = try JSONEncoder().encode(Request(id: id, text: text, voice: voice, out: out.path, lang: lang, instruct: instruct, cfg: cfg)) + Data("\n".utf8)
         do {
             try stdin.write(contentsOf: line)
         } catch {
@@ -124,6 +125,9 @@ actor HelperProcess {
         let out: String
         /// Omitted from the JSON when nil; the helper then uses its default.
         let lang: String?
+        /// Breeze only, omitted when nil like `lang`.
+        let instruct: String?
+        let cfg: Double?
     }
 
     private struct ReadyEvent: Decodable {

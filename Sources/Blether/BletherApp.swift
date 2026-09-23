@@ -73,6 +73,16 @@ struct BletherApp: App {
                     kokoro.stop()
                 }
             }
+            if let breeze = registry.provider(id: "breeze") as? BreezeProvider {
+                // Only warm at launch if a profile speaks with it: the model is 2.3 GB. Otherwise the
+                // first Breeze clip starts it (blether-FGSKN).
+                if settings.profiles.contains(where: { $0.providerID == "breeze" }) {
+                    Task { await breeze.start() }
+                }
+                NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+                    breeze.stop()
+                }
+            }
         }
         self.registry = registry
         self.ears = ears
@@ -84,12 +94,13 @@ struct BletherApp: App {
         _appState = State(initialValue: state)
     }
 
-    /// Kokoro first, then the four API providers. Each reads its key from Keychain at call time, off
+    /// Kokoro and Breeze first, then the four API providers. Each reads its key from Keychain at call time, off
     /// the main actor, through `apiKeyReader`.
     @MainActor
     private static func makeRegistry(settings: AppSettings, state: AppState) -> ProviderRegistry {
         ProviderRegistry([
             makeKokoro(settings: settings, state: state),
+            makeBreeze(settings: settings, state: state),
             ElevenLabsProvider(apiKey: settings.apiKeyReader(for: "elevenlabs")),
             OpenAIProvider(apiKey: settings.apiKeyReader(for: "openai")),
             XAIProvider(apiKey: settings.apiKeyReader(for: "xai")),
@@ -114,6 +125,28 @@ struct BletherApp: App {
                 case .starting: state.providerStatus = "Kokoro: warming up"
                 case .ready: state.providerStatus = nil
                 case .failed(let message): state.providerStatus = "Kokoro: \(message)"
+                }
+            }
+        }
+    }
+
+    /// Breeze through its bundled helper, or a stand-in that fails audibly when uv or the script is missing.
+    @MainActor
+    private static func makeBreeze(settings: AppSettings, state: AppState) -> any Provider {
+        guard let script = Bundle.main.url(forResource: "breeze", withExtension: "py") else {
+            state.breezeStatus = "Breeze: helper script missing from the app bundle"
+            return UnavailableProvider(name: "breeze", reason: "helper script missing")
+        }
+        guard let uv = UVLocator.find(override: settings.uvPath) else {
+            state.breezeStatus = "Breeze: uv not found, set its path in Settings > Advanced"
+            return UnavailableProvider(name: "breeze", reason: "uv not found")
+        }
+        return BreezeProvider(executable: uv, arguments: ["run", script.path], settings: settings.breezeReader()) { newState in
+            Task { @MainActor in
+                switch newState {
+                case .starting: state.breezeStatus = "Breeze: warming up"
+                case .ready: state.breezeStatus = nil
+                case .failed(let message): state.breezeStatus = "Breeze: \(message)"
                 }
             }
         }
@@ -208,7 +241,7 @@ struct BletherApp: App {
             // Status lines live below Quit, in a dead-end after a divider, so a line vanishing (Kokoro
             // warming up, say) cannot shift the items above it under a moving mouse. The user clicked
             // Quit instead of Settings twice that way (2026-09-19).
-            let status = [appState.listenerError, appState.providerStatus, appState.listeningStatus, appState.channelError].compactMap { $0 }
+            let status = [appState.listenerError, appState.providerStatus, appState.breezeStatus, appState.listeningStatus, appState.channelError].compactMap { $0 }
             if !status.isEmpty {
                 Divider()
                 ForEach(status, id: \.self) { line in

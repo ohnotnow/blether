@@ -15,8 +15,11 @@ vendored transcribe.cpp Swift binding, and the words go into the right
 Claude Code session over the channels preview, served by blether itself.
 On 2026-09-19 the settings window was redesigned as a sidebar (slice 11,
 ant blether-bREz9), the menubar icon became a robot head drawn in code, and
-the LLM page gained provider presets. What is left is slice 9 (retire the
-Python repos). README.md says what the app does; this file says how we
+the LLM page gained provider presets. On 2026-09-22, on the user's new M6
+Mac, slice 13 added Breeze-TTS-2 as a second local provider that speaks in
+voice designs (written descriptions) with a global Faster/Better switch;
+built and heard, not yet judged, because the new Mac was still indexing.
+What is left is slice 9 (retire the Python repos). README.md says what the app does; this file says how we
 work on it.
 
 The thinking behind the design is written down in `ant`, so you do not have
@@ -63,17 +66,24 @@ to re-derive it or, worse, re-argue it.
    list, the user's decisions made while using it: looking at an LLM
    provider must not switch to it, content logging off by default, unique
    profile names, status lines below Quit) and `blether-UYWmj` (the icon).
-11. The 2026-09-20 external review: `ant show blether-yYpms` (hold the mic,
+11. The Breeze notes (slice 13): `ant show blether-WtzbG` (M6 timings, the
+   user's decisions, why a design is text and not a sample),
+   `blether-gzXn6` with `blether-uHwCr` (how to write a design; the four
+   approved designs), `blether-2LALH` (Servalan is the user's name for one
+   of them, a tribute; not up for renaming), `blether-FGSKN` (the
+   800-character cap and the leans), `blether-Sgdkm` (mlx-audio from PyPI),
+   and `blether-BM3Un` (first real use: the local LLM was the real delay).
+12. The 2026-09-20 external review: `ant show blether-yYpms` (hold the mic,
    not the queue: a finish handler waits until nothing is playing) and the
    note "The 2026-09-20 external code review" (`ant search "code review"`),
    which lists what was fixed and what was left, so you do not redo it.
-12. The latest handover note (`ant list`, the newest "Handover" title). It
+13. The latest handover note (`ant list`, the newest "Handover" title). It
    says where things stand and what is next.
-13. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
+14. The `/swift` skill, if it is installed (`~/.claude/skills/swift/SKILL.md`).
    An informal notepad of macOS Swift gotchas from earlier projects, not
    rules. blether departs from it in one place: no App Sandbox (see the
    decisions table for why).
-14. Only if you need the history and have the sibling checkouts:
+15. Only if you need the history and have the sibling checkouts:
    `../claude-speaks` has `ant show cs-XKtxA` and `ant show cs-Ed6UZ` (the
    two conversations that shaped the rewrite), and `../claude-listens` has
    `TECHNICAL_OVERVIEW.md` for the channels wire contract.
@@ -127,15 +137,19 @@ means the mic; "Listen on the network" is remote mode and unrelated.
   clip via `Speech/QuipPlanner` (with `Speech/ToneClassifier` colouring
   the reply when tone is on), `Providers/` synthesise them
   (`ProviderRegistry` holds them all; `KokoroProvider` over `HelperProcess`,
-  which keeps `Helpers/kokoro.py` alive and talks JSON lines to it; the
-  four API providers share `SpeechHTTP`), `PlaybackQueue` plays them one
+  which keeps `Helpers/kokoro.py` alive and talks JSON lines to it;
+  `BreezeProvider` does the same with `Helpers/breeze.py`, started only
+  when a profile uses it, sending each clip's voice design and quality
+  from `Settings/VoiceDesign.swift`; the four API providers share
+  `SpeechHTTP`), `PlaybackQueue` plays them one
   at a time. The profile chooses the provider. The log is `~/Library/Logs/blether.log`;
   lines that would carry spoken or heard words go through `Log.content`,
   which hides them unless the user switched content logging on. `Settings/`
   holds the UserDefaults-backed store (`AppSettings`) and the settings
   window: `SettingsView` is a sidebar of pages (General, Profiles, Personas,
   TTS Providers, LLM, Listening) and each page is one or two `*Section`
-  files. `Speech/VoiceSampler` plays and caches the per-voice sample behind
+  files. `DescriptionEditor` is the one sheet for adding or editing a
+  persona or a Breeze voice design. `Speech/VoiceSampler` plays and caches the per-voice sample behind
   the Play buttons. `MenuBarIcon` draws the robot head in code as a template
   image; there is no icon asset. `LLM/` is the chat-completions client plus
   `LLMProvider`, the preset table (Anthropic, OpenAI, xAI, Mistral,

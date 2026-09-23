@@ -58,6 +58,19 @@ final class HelperProcessTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: b.path))
     }
 
+    func testBreezeFieldsGoOnTheWireOnlyWhenSet() async throws {
+        helper = try makeHelper()
+        await helper.start()
+        let breeze = tempWAV(), kokoro = tempWAV()
+        defer { for url in [breeze, kokoro] { for ext in ["", ".instruct", ".cfg"] { try? FileManager.default.removeItem(atPath: url.path + ext) } } }
+        try await helper.request(text: "one", voice: "servalan", out: breeze, instruct: "A deep voice.", cfg: 4, timeout: .seconds(5))
+        XCTAssertEqual(try String(contentsOfFile: breeze.path + ".instruct", encoding: .utf8), "A deep voice.")
+        XCTAssertEqual(try String(contentsOfFile: breeze.path + ".cfg", encoding: .utf8), "4")
+        try await helper.request(text: "two", voice: "af_heart", out: kokoro, timeout: .seconds(5))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: kokoro.path + ".instruct"), "no instruct key when nil")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: kokoro.path + ".cfg"), "no cfg key when nil")
+    }
+
     func testRefusedVoiceThrowsRefused() async throws {
         helper = try makeHelper()
         await helper.start()

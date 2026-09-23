@@ -2,6 +2,8 @@
 /// A profile names one by id; nil or an unknown id means the default, Kokoro.
 final class ProviderRegistry: Sendable {
     static let defaultID = "kokoro"
+    /// Providers that run on this Mac and so have no API key.
+    static let localIDs: Set<String> = ["kokoro", "breeze"]
 
     /// In display order.
     let all: [any Provider]
@@ -22,6 +24,7 @@ final class ProviderRegistry: Sendable {
     static func displayName(id: String) -> String {
         switch id {
         case "kokoro": "Kokoro"
+        case "breeze": "Breeze"
         case "elevenlabs": "ElevenLabs"
         case "openai": "OpenAI"
         case "xai": "xAI"

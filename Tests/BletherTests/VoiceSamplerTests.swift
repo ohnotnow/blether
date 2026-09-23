@@ -63,4 +63,13 @@ final class VoiceSamplerTests: XCTestCase {
         XCTAssertTrue(a.hasPrefix("mistral-fr%2Fslug%20one-"))
         XCTAssertNotEqual(a, VoiceSampler.fileStem(providerID: "mistral", voiceID: "fr/slug one", text: "y"))
     }
+
+    func testAVariantMakesAFreshStemAndNoVariantKeepsTheOldOne() {
+        let plain = VoiceSampler.fileStem(providerID: "mistral", voiceID: "fr/slug one", text: "x")
+        XCTAssertEqual(plain, "mistral-fr%2Fslug%20one-2d711642", "the hash from before variants existed, so caches stay valid")
+        let deep = VoiceSampler.fileStem(providerID: "breeze", voiceID: "servalan", text: "x", variant: "Deep.\nbetter")
+        XCTAssertNotEqual(deep, VoiceSampler.fileStem(providerID: "breeze", voiceID: "servalan", text: "x", variant: "Deeper.\nbetter"))
+        XCTAssertNotEqual(deep, VoiceSampler.fileStem(providerID: "breeze", voiceID: "servalan", text: "x", variant: "Deep.\nfaster"))
+        XCTAssertNotEqual(deep, VoiceSampler.fileStem(providerID: "breeze", voiceID: "servalan", text: "x"))
+    }
 }

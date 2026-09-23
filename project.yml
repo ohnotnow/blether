@@ -25,6 +25,8 @@ targets:
       - Sources/Blether
       - path: Helpers/kokoro.py
         buildPhase: resources
+      - path: Helpers/breeze.py
+        buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
       - package: TranscribeCpp

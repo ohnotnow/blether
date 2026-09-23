@@ -46,7 +46,9 @@ struct SettingsView: View {
                 case .general: GeneralSection(settings: settings, speaking: speaking, listening: listening)
                 case .profiles: VoicesSection(settings: settings, registry: registry)
                 case .personas: PersonasSection(settings: settings)
-                case .providers: ProvidersSection(settings: settings, registry: registry)
+                case .providers:
+                    ProvidersSection(settings: settings, registry: registry)
+                    BreezeSection(settings: settings)
                 case .llm:
                     LLMSection(settings: settings)
                     ToneSection(settings: settings)

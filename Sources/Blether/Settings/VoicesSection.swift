@@ -53,7 +53,11 @@ struct VoicesSection: View {
 
     private var editingProvider: any Provider { registry.provider(id: editingProfile.providerID) }
 
-    private var voices: [Voice] { voicesByProvider[editingProvider.name] ?? [] }
+    /// Breeze's voices are the designs in Settings, read on every render so one added on the TTS
+    /// Providers page is here without reopening the window.
+    private var voices: [Voice] {
+        editingProvider.name == "breeze" ? settings.voiceDesigns.map(\.voice) : voicesByProvider[editingProvider.name] ?? []
+    }
 
     /// Once per provider per window, until Retry clears the entry. A failure is shown at each voice row.
     private func loadVoices(for provider: any Provider) async {
@@ -214,7 +218,7 @@ struct VoicesSection: View {
             sampleError[role] = nil
             Task {
                 do {
-                    try await sampler?.play(providerID: editingProvider.name, voiceID: voiceID, name: name)
+                    try await sampler?.play(providerID: editingProvider.name, voiceID: voiceID, name: name, variant: sampleVariant(voiceID))
                 } catch {
                     sampleError[role] = "Could not play a sample: \(error)"
                     sampling = nil
@@ -223,6 +227,15 @@ struct VoicesSection: View {
         }
         .disabled(voiceID.trimmingCharacters(in: .whitespaces).isEmpty || (sampler?.inFlight.isEmpty == false))
         .accessibilityLabel(playing ? "Stop the sample of \(name)" : "Play a sample of \(name)")
+    }
+
+    /// What else decides a Breeze sample's sound: the design the provider will actually use (the
+    /// first one for an unknown id) and the quality. Nil for every other provider.
+    private func sampleVariant(_ voiceID: String) -> String? {
+        guard editingProvider.name == "breeze" else { return nil }
+        let designs = settings.voiceDesigns
+        let design = designs.first { $0.id == voiceID } ?? designs.first
+        return (design?.description ?? "") + "\n" + settings.breezeQuality.rawValue
     }
 
     private func retryVoices() {

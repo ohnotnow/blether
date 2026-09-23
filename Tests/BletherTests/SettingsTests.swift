@@ -184,6 +184,42 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(self.settings.persona(for: .monologue))
     }
 
+    @MainActor func testVoiceDesignsDefaultToTheFourWithServalanFirstAndQualityBetter() {
+        XCTAssertEqual(settings.voiceDesigns.map(\.id), ["servalan", "marvin", "danish-detective", "the-guide"])
+        XCTAssertEqual(settings.breezeQuality, .better)
+    }
+
+    @MainActor func testVoiceDesignsAddUpdateAndDeleteLikePersonas() {
+        let settings = settings
+        settings.addVoiceDesign(name: "  Dame \n", description: " Female, loud. ")
+        let dame = settings.voiceDesigns[4]
+        XCTAssertEqual(dame.name, "Dame")
+        XCTAssertEqual(dame.description, "Female, loud.")
+        XCTAssertFalse(VoiceDesign.defaults.map(\.id).contains(dame.id))
+        settings.updateVoiceDesign(VoiceDesign(id: "marvin", name: "Marv", description: "cheerier"))
+        XCTAssertEqual(settings.voiceDesigns[1].name, "Marv")
+        settings.updateVoiceDesign(VoiceDesign(id: "ghost", name: "Ghost", description: "x"))
+        XCTAssertEqual(settings.voiceDesigns.count, 5)
+        settings.deleteVoiceDesign(id: "marvin")
+        XCTAssertEqual(self.settings.voiceDesigns.map(\.name), ["Servalan", "Danish Detective", "The Guide", "Dame"], "a second instance sees it")
+    }
+
+    @MainActor func testDeletingEveryVoiceDesignLeavesNoneRatherThanTheDefaults() {
+        let settings = settings
+        for design in settings.voiceDesigns { settings.deleteVoiceDesign(id: design.id) }
+        XCTAssertEqual(self.settings.voiceDesigns, [])
+    }
+
+    @MainActor func testBreezeReaderSeesTheLatestWriteFromAnotherThread() async {
+        let settings = settings
+        let read = settings.breezeReader()
+        settings.breezeQuality = .faster
+        settings.updateVoiceDesign(VoiceDesign(id: "servalan", name: "Servalan", description: "Deeper."))
+        let (designs, quality) = await Task.detached { read() }.value
+        XCTAssertEqual(quality, .faster)
+        XCTAssertEqual(designs.first?.description, "Deeper.")
+    }
+
     @MainActor func testValuesRoundTripThroughASecondInstance() {
         let settings = settings
         let dame = Persona(id: "dame", name: "Dame", description: "a wildly excited pantomime dame")
