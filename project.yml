@@ -14,7 +14,7 @@ settings:
 packages:
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
-    from: 1.10.0
+    from: 3.1.0
   TranscribeCpp:
     path: Packages/TranscribeCpp
 targets:

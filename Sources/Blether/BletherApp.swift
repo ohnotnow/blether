@@ -212,7 +212,9 @@ struct BletherApp: App {
                 }
                 Divider()
             }
+            // Shows the recorded hotkeys beside the items; the hotkeys themselves are the onKeyUp handlers.
             Toggle("Speaking", isOn: speaking)
+                .globalKeyboardShortcut(.toggleSpeaking)
             Toggle("Listening", isOn: listening)
             // "Default profile", not "Profile": blether has no current profile. A hook that names one
             // with ?profile= still gets that one; this changes only what an unnamed hook gets
@@ -228,6 +230,7 @@ struct BletherApp: App {
             Button("Stop talking") {
                 if ears.isListening { ears.cancel() } else { queue.stop() }
             }
+            .globalKeyboardShortcut(.stopTalking)
             Divider()
             Button("Settings...") {
                 // Without activating first, the window opens behind everything under LSUIElement.
