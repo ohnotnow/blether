@@ -4,14 +4,9 @@ import XCTest
 
 /// What the provider reads from Settings, changeable mid-test from any thread.
 private final class DesignsBox: Sendable {
-    private let value = Mutex<(designs: [VoiceDesign], quality: BreezeQuality)>((VoiceDesign.defaults, .better))
-    func set(designs: [VoiceDesign]? = nil, quality: BreezeQuality? = nil) {
-        value.withLock {
-            if let designs { $0.designs = designs }
-            if let quality { $0.quality = quality }
-        }
-    }
-    var read: @Sendable () -> (designs: [VoiceDesign], quality: BreezeQuality) { { self.value.withLock { $0 } } }
+    private let value = Mutex<[VoiceDesign]>(VoiceDesign.defaults)
+    func set(designs: [VoiceDesign]) { value.withLock { $0 = designs } }
+    var read: @Sendable () -> [VoiceDesign] { { self.value.withLock { $0 } } }
 }
 
 /// Drives BreezeProvider with the fake helper, so no uv or Breeze is needed here.
@@ -60,11 +55,22 @@ final class BreezeProviderTests: XCTestCase {
         provider = try makeProvider()
         let first = try await provider.synthesise("One", voice: "servalan", language: nil, tone: nil)
         defer { remove(first) }
-        box.set(designs: [VoiceDesign(id: "servalan", name: "Servalan", description: "Deeper still.")], quality: .faster)
+        box.set(designs: [VoiceDesign(id: "servalan", name: "Servalan", description: "Deeper still.", quality: .faster)])
         let second = try await provider.synthesise("Two", voice: "servalan", language: nil, tone: nil)
         defer { remove(second) }
         XCTAssertEqual(try sent("instruct", for: second), "Deeper still.")
         XCTAssertEqual(try sent("cfg", for: second), "1")
+    }
+
+    func testEachDesignSendsItsOwnQuality() async throws {
+        box.set(designs: [VoiceDesign(id: "quick", name: "Quick", description: "Brisk.", quality: .faster), VoiceDesign.marvin])
+        provider = try makeProvider()
+        let quick = try await provider.synthesise("One", voice: "quick", language: nil, tone: nil)
+        defer { remove(quick) }
+        let marvin = try await provider.synthesise("Two", voice: "marvin", language: nil, tone: nil)
+        defer { remove(marvin) }
+        XCTAssertEqual(try sent("cfg", for: quick), "1")
+        XCTAssertEqual(try sent("cfg", for: marvin), "4")
     }
 
     func testAnUnknownDesignSpeaksAsTheFirst() async throws {

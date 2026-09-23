@@ -17,8 +17,9 @@ On 2026-09-19 the settings window was redesigned as a sidebar (slice 11,
 ant blether-bREz9), the menubar icon became a robot head drawn in code, and
 the LLM page gained provider presets. On 2026-09-22, on the user's new M6
 Mac, slice 13 added Breeze-TTS-2 as a second local provider that speaks in
-voice designs (written descriptions) with a global Faster/Better switch;
-built and heard, not yet judged, because the new Mac was still indexing.
+voice designs (written descriptions). On 2026-09-23 the user judged it on
+the quiet Mac: Better was too slow for long replies, so quality became a
+per-design Faster/Better setting (ant blether-vNbF9).
 What is left is slice 9 (retire the Python repos). README.md says what the app does; this file says how we
 work on it.
 

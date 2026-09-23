@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Breeze's settings on the TTS Providers page: the one quality switch and the voice designs,
+/// Breeze's settings on the TTS Providers page: the voice designs, each with its own quality,
 /// managed like personas. Profiles pick a design per role like any other voice (blether-WtzbG).
 struct BreezeSection: View {
     @Bindable var settings: AppSettings
@@ -11,19 +11,6 @@ struct BreezeSection: View {
 
     var body: some View {
         Section {
-            Picker("Quality", selection: $settings.breezeQuality) {
-                ForEach(BreezeQuality.allCases, id: \.self) { quality in
-                    Text(quality.displayName).tag(quality)
-                }
-            }
-            .pickerStyle(.segmented)
-            Text("Better sounds noticeably richer and takes about twice as long to make.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        } header: {
-            Text("Breeze")
-        }
-        Section {
             ForEach(settings.voiceDesigns) { design in
                 LabeledContent {
                     Button("Edit") { editing = .edit(id: design.id, name: design.name, description: design.description) }
@@ -32,7 +19,7 @@ struct BreezeSection: View {
                         .accessibilityLabel("Delete \(design.name)")
                 } label: {
                     Text(design.name)
-                    Text(design.description)
+                    Text("\(design.quality.displayName): \(design.description)")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -53,13 +40,20 @@ struct BreezeSection: View {
             Text("Breeze builds a voice from a written description. It runs on this Mac, and the first use downloads about 2.3 GB. A profile picks a design for each role, like any other voice.")
         }
         .sheet(item: $editing) { mode in
-            DescriptionEditor(mode: mode, help: Self.designHelp) { name, description in
+            DescriptionEditor(mode: mode, help: Self.designHelp, quality: quality(for: mode)) { name, description, quality in
+                let quality = quality ?? .better
                 switch mode {
-                case .add: settings.addVoiceDesign(name: name, description: description)
-                case .edit(let id, _, _): settings.updateVoiceDesign(VoiceDesign(id: id, name: name, description: description))
+                case .add: settings.addVoiceDesign(name: name, description: description, quality: quality)
+                case .edit(let id, _, _): settings.updateVoiceDesign(VoiceDesign(id: id, name: name, description: description, quality: quality))
                 }
             }
         }
+    }
+
+    /// A new design starts at Better; an edited one keeps its own.
+    private func quality(for mode: DescriptionEditor.Mode) -> BreezeQuality {
+        guard case .edit(let id, _, _) = mode else { return .better }
+        return settings.voiceDesigns.first { $0.id == id }?.quality ?? .better
     }
 
     private var missingDefaults: [VoiceDesign] {

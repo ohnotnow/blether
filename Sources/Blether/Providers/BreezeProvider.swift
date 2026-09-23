@@ -9,7 +9,7 @@ final class BreezeProvider: Provider, Sendable {
     let maxMainCharacters = 800
 
     private let helper: HelperProcess
-    private let settings: @Sendable () -> (designs: [VoiceDesign], quality: BreezeQuality)
+    private let settings: @Sendable () -> [VoiceDesign]
     private let requestTimeout: Duration
 
     /// `requestTimeout` covers a first request queued behind the 2.3 GB model download; a warm
@@ -17,7 +17,7 @@ final class BreezeProvider: Provider, Sendable {
     init(
         executable: URL,
         arguments: [String],
-        settings: @escaping @Sendable () -> (designs: [VoiceDesign], quality: BreezeQuality),
+        settings: @escaping @Sendable () -> [VoiceDesign],
         requestTimeout: Duration = .seconds(300),
         onState: @escaping @Sendable (HelperProcess.State) -> Void
     ) {
@@ -31,12 +31,12 @@ final class BreezeProvider: Provider, Sendable {
 
     /// The designs, without starting the helper: listing voices must not load 2.3 GB.
     func voices() async throws -> [Voice] {
-        settings().designs.map(\.voice)
+        settings().map(\.voice)
     }
 
     /// `language` and `tone` are ignored: Breeze reads the text as written, and tone is not expressed yet.
     func synthesise(_ text: String, voice id: String, language: String?, tone: Tone?) async throws -> AudioClip {
-        let (designs, quality) = settings()
+        let designs = settings()
         guard let design = designs.first(where: { $0.id == id }) ?? designs.first else {
             throw ProviderError.other("no Breeze voice designs")
         }
@@ -44,7 +44,7 @@ final class BreezeProvider: Provider, Sendable {
         await helper.start()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
         do {
-            try await helper.request(text: text, voice: design.id, out: url, instruct: design.description, cfg: quality.cfgScale, timeout: requestTimeout)
+            try await helper.request(text: text, voice: design.id, out: url, instruct: design.description, cfg: design.quality.cfgScale, timeout: requestTimeout)
         } catch let error as HelperError {
             throw Self.providerError(error)
         }

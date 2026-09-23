@@ -230,12 +230,12 @@ struct VoicesSection: View {
     }
 
     /// What else decides a Breeze sample's sound: the design the provider will actually use (the
-    /// first one for an unknown id) and the quality. Nil for every other provider.
+    /// first one for an unknown id) and its quality. Nil for every other provider.
     private func sampleVariant(_ voiceID: String) -> String? {
         guard editingProvider.name == "breeze" else { return nil }
         let designs = settings.voiceDesigns
         let design = designs.first { $0.id == voiceID } ?? designs.first
-        return (design?.description ?? "") + "\n" + settings.breezeQuality.rawValue
+        return (design?.description ?? "") + "\n" + (design?.quality.rawValue ?? "")
     }
 
     private func retryVoices() {

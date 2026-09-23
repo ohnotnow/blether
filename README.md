@@ -220,7 +220,9 @@ texture, pace), the more it sounds like the same person from clip to clip.
 
 It needs a fast Mac. On an M1 it made speech four to eight times slower
 than it plays; on an M6 it keeps up at the Faster quality setting and
-takes about twice as long as the speech at Better. Kokoro is much quicker
+takes about twice as long as the speech at Better. Each design has its own
+quality, so a short preamble can be Better while the reply is Faster; for
+one voice at both, add the design twice. Kokoro is much quicker
 on any Mac. A long reply is cut shorter for Breeze than for Kokoro so the
 wait stays around a minute at most.
 

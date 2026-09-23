@@ -1,11 +1,13 @@
 /// A Breeze voice: a name and a written description of how it sounds. Not a persona, which says
 /// what to say (blether-WtzbG). The four defaults were heard and approved by the user on 2026-09-22
 /// (blether-gzXn6, blether-uHwCr); detailed descriptions like these keep the voice the same actor
-/// from clip to clip, where a one-line character sketch does not.
+/// from clip to clip, where a one-line character sketch does not. Quality is per design, so a short
+/// preamble can be Better while a long reply is Faster (blether-vNbF9); duplicate a design for both.
 struct VoiceDesign: Codable, Identifiable, Hashable, Sendable {
     let id: String
     var name: String
     var description: String
+    var quality: BreezeQuality = .better
 
     /// First, because the first design is the fallback for a deleted one and she speaks at a normal pace.
     static let servalan = VoiceDesign(
@@ -35,9 +37,20 @@ struct VoiceDesign: Codable, Identifiable, Hashable, Sendable {
     var voice: Voice { Voice(id: id, name: name, language: "en") }
 }
 
-/// Breeze's one global quality knob, the user's decision (blether-WtzbG): its classifier-free
-/// guidance scale. Better is noticeably richer and takes about twice as long.
-enum BreezeQuality: String, CaseIterable, Sendable {
+extension VoiceDesign {
+    /// Designs stored before quality was per design have none; they read as Better.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decode(String.self, forKey: .description)
+        quality = try container.decodeIfPresent(BreezeQuality.self, forKey: .quality) ?? .better
+    }
+}
+
+/// A design's quality: Breeze's classifier-free guidance scale. Better is noticeably richer and
+/// takes about twice as long.
+enum BreezeQuality: String, Codable, CaseIterable, Sendable {
     case faster, better
 
     var cfgScale: Double {

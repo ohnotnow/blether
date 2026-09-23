@@ -34,7 +34,7 @@ struct PersonasSection: View {
             Text("A persona writes the words; a profile picks which persona speaks in each role.")
         }
         .sheet(item: $editing) { mode in
-            DescriptionEditor(mode: mode, help: "A noun phrase that finishes the sentence “in the voice of…”, so no full stop.") { name, description in
+            DescriptionEditor(mode: mode, help: "A noun phrase that finishes the sentence “in the voice of…”, so no full stop.") { name, description, _ in
                 switch mode {
                 case .add: settings.addPersona(name: name, description: description)
                 case .edit(let id, _, _): settings.updatePersona(Persona(id: id, name: name, description: description))

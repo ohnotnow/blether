@@ -186,18 +186,26 @@ final class SettingsTests: XCTestCase {
 
     @MainActor func testVoiceDesignsDefaultToTheFourWithServalanFirstAndQualityBetter() {
         XCTAssertEqual(settings.voiceDesigns.map(\.id), ["servalan", "marvin", "danish-detective", "the-guide"])
-        XCTAssertEqual(settings.breezeQuality, .better)
+        XCTAssertEqual(Set(settings.voiceDesigns.map(\.quality)), [.better])
+    }
+
+    @MainActor func testADesignStoredWithoutAQualityReadsAsBetter() throws {
+        let old = #"[{"id": "dame", "name": "Dame", "description": "Female, loud."}]"#
+        defaults.set(Data(old.utf8), forKey: "voiceDesigns")
+        XCTAssertEqual(settings.voiceDesigns, [VoiceDesign(id: "dame", name: "Dame", description: "Female, loud.", quality: .better)])
     }
 
     @MainActor func testVoiceDesignsAddUpdateAndDeleteLikePersonas() {
         let settings = settings
-        settings.addVoiceDesign(name: "  Dame \n", description: " Female, loud. ")
+        settings.addVoiceDesign(name: "  Dame \n", description: " Female, loud. ", quality: .faster)
         let dame = settings.voiceDesigns[4]
         XCTAssertEqual(dame.name, "Dame")
         XCTAssertEqual(dame.description, "Female, loud.")
+        XCTAssertEqual(dame.quality, .faster)
         XCTAssertFalse(VoiceDesign.defaults.map(\.id).contains(dame.id))
-        settings.updateVoiceDesign(VoiceDesign(id: "marvin", name: "Marv", description: "cheerier"))
+        settings.updateVoiceDesign(VoiceDesign(id: "marvin", name: "Marv", description: "cheerier", quality: .faster))
         XCTAssertEqual(settings.voiceDesigns[1].name, "Marv")
+        XCTAssertEqual(self.settings.voiceDesigns[1].quality, .faster, "a second instance sees the quality")
         settings.updateVoiceDesign(VoiceDesign(id: "ghost", name: "Ghost", description: "x"))
         XCTAssertEqual(settings.voiceDesigns.count, 5)
         settings.deleteVoiceDesign(id: "marvin")
@@ -213,11 +221,10 @@ final class SettingsTests: XCTestCase {
     @MainActor func testBreezeReaderSeesTheLatestWriteFromAnotherThread() async {
         let settings = settings
         let read = settings.breezeReader()
-        settings.breezeQuality = .faster
-        settings.updateVoiceDesign(VoiceDesign(id: "servalan", name: "Servalan", description: "Deeper."))
-        let (designs, quality) = await Task.detached { read() }.value
-        XCTAssertEqual(quality, .faster)
+        settings.updateVoiceDesign(VoiceDesign(id: "servalan", name: "Servalan", description: "Deeper.", quality: .faster))
+        let designs = await Task.detached { read() }.value
         XCTAssertEqual(designs.first?.description, "Deeper.")
+        XCTAssertEqual(designs.first?.quality, .faster)
     }
 
     @MainActor func testValuesRoundTripThroughASecondInstance() {
