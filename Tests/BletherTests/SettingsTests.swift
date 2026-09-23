@@ -525,6 +525,9 @@ final class LogContentTests: XCTestCase {
         XCTAssertEqual(Log.content("send it to someone at example dot com"), "[37 chars, content logging off]")
         Log.logsContent.withLock { $0 = true }
         XCTAssertEqual(Log.content("send it to  someone"), "\"send it to someone\"")
+        let long = String(repeating: "word ", count: 40).trimmingCharacters(in: .whitespaces)
+        XCTAssertEqual(Log.content(long), "\"\(long)\"", "in full once switched on")
+        XCTAssertEqual(Log.content(long, limit: 9), "\"word word…\"")
     }
 }
 

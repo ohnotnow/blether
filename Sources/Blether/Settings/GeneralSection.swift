@@ -64,7 +64,7 @@ struct GeneralSection: View {
                         .accessibilityLabel("Clear the log")
                 }
             }
-            SettingToggle("Log the words too", "Off logs what blether did and how long it took, never what was said. On adds the first line of each reply, preamble and transcript, for debugging.", isOn: $settings.logsContent)
+            SettingToggle("Log the words too", "Off logs what blether did and how long it took, never what was said. On adds, for debugging, everything that was spoken or heard in full: each preamble, reply and notification, and each transcript. The start of Claude's reply is logged too.", isOn: $settings.logsContent)
             SettingToggle("Keep recent clips", "Off keeps nothing. On keeps the last ten clips blether spoke, as files, for showing someone what it does. Never what the microphone heard.", isOn: $settings.keepsRecentClips)
             LabeledContent("Recent clips") {
                 Button("Open in Finder") {

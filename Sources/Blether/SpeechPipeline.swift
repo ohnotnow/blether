@@ -89,6 +89,9 @@ final class SpeechPipeline: Sendable {
             classifier: snapshot.classifier
         )
 
+        // The planner logs the preamble; this is the reply as it will be spoken, summarised or not.
+        for clip in clips where clip.role == .main { Log.log("reply: \(Log.content(clip.text))") }
+
         let synthesise: @Sendable (PlannedClip) async -> Result<AudioClip, Error> = { [provider] clip in
             let voice = snapshot.voices[clip.role] ?? KokoroProvider.defaultVoiceID
             let spoken = Pronunciations.apply(clip.text, snapshot.pronunciations)

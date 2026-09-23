@@ -201,7 +201,8 @@ final class HookServer: @unchecked Sendable {
                 return
             }
             let session = SessionKey(id: payload.sessionId, pid: request.query["pid"].flatMap { Int32($0) })
-            Log.log("hook Stop\(label): \(Log.content(text))")
+            // Cut short: the whole reply can run to pages and is in the Claude Code transcript anyway.
+            Log.log("hook Stop\(label): \(Log.content(text, limit: 80))")
             onEvent(.stop(text: text, session: session), profile)
         case "Notification":
             Log.log("hook Notification\(label)")

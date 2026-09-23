@@ -31,9 +31,10 @@ enum Log {
         file?.write(data)
     }
 
-    /// `preview` of user content, or a placeholder when content logging is off. Every log line that
-    /// would show a reply, a transcript or a persona line goes through here, not `preview` directly.
-    static func content(_ text: String, limit: Int = 80) -> String {
+    /// User content in full (whitespace collapsed), or cut to `limit` when given, or a placeholder when
+    /// content logging is off. Every log line that would show a reply, a transcript or a persona line
+    /// goes through here, not `preview` directly. Full by default: the user switched it on to see the words.
+    static func content(_ text: String, limit: Int = .max) -> String {
         logsContent.withLock { $0 } ? "\"\(preview(text, limit: limit))\"" : "[\(text.count) chars, content logging off]"
     }
 
