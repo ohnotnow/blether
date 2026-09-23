@@ -54,6 +54,7 @@ def log(message: str) -> None:
 def main() -> int:
     try:
         status("loading libraries")
+        import mlx.core as mx
         import numpy as np
         import soundfile as sf
         from mlx_audio.tts import load
@@ -67,6 +68,7 @@ def main() -> int:
         t0 = time.perf_counter()
         for _ in model.generate(text="Ready.", instruct=WARM_UP_INSTRUCT, cfg_scale=1.0):
             pass
+        mx.clear_cache()
         log(f"warm-up took {time.perf_counter() - t0:.1f}s")
     except BaseException as exc:  # noqa: BLE001
         send({"event": "fatal", "message": f"{type(exc).__name__}: {exc}"})
@@ -100,6 +102,10 @@ def main() -> int:
         except BaseException as exc:  # noqa: BLE001
             send({"id": request_id, "ok": False, "error": f"{type(exc).__name__}: {exc}"[:300]})
             continue
+        finally:
+            # MLX keeps freed GPU buffers for reuse, up to the whole memory limit by default; without
+            # this the helper held 17 GB after five replies on a 24 GB Mac (2026-09-23).
+            mx.clear_cache()
         log(f"{voice} cfg {cfg:g}: {len(audio) / SAMPLE_RATE:.1f}s of audio in {time.perf_counter() - t0:.2f}s")
         send({"id": request_id, "ok": True})
     return 0
