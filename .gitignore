@@ -10,4 +10,6 @@ xcuserdata/
 /settings_screenshots
 /CODE_REVIEW.md
 /gpt-research.md
-/training/*
+training/*.mp3
+training/*.wav
+training/*.safetensors
