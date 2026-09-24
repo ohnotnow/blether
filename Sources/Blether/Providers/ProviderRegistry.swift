@@ -19,6 +19,13 @@ final class ProviderRegistry: Sendable {
 
     var ids: [String] { all.map(\.name) }
 
+    /// The Keychain accounts the API providers read, in display order, each once: one key row per
+    /// account on the Providers page, so an OpenRouter key is pasted once however many use it.
+    var keyAccounts: [String] {
+        var seen = Set<String>()
+        return all.filter { !Self.localIDs.contains($0.name) }.map(\.keychainAccount).filter { seen.insert($0).inserted }
+    }
+
     /// The user-facing name. A switch on purpose: a new provider fails to build until it is named here,
     /// and the default arm keeps test fakes displayable.
     static func displayName(id: String) -> String {
@@ -30,6 +37,9 @@ final class ProviderRegistry: Sendable {
         case "openai": "OpenAI"
         case "xai": "xAI"
         case "mistral": "Mistral"
+        case "gemini": "Gemini (OpenRouter)"
+        // Not a provider: the key account every OpenRouter provider shares, titled on the Providers page.
+        case "openrouter": "OpenRouter"
         default: id.capitalized
         }
     }

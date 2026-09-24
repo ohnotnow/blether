@@ -52,6 +52,7 @@ Text-to-speech, pick one per profile:
 | OpenAI | API key | Fixed voice list |
 | xAI | API key | Lists your account's voices |
 | Mistral | API key | Lists your account's voices; voices can express tone |
+| Gemini 3.8 Flash TTS via [OpenRouter](https://openrouter.ai/google/gemini-3.8-flash-tts) | OpenRouter API key | Fixed voice list; voices can express tone |
 
 The LLM that writes the words, one global choice, any OpenAI-compatible
 chat completions endpoint:
@@ -206,7 +207,7 @@ string to paste under each profile.
 
 Off by default. Switched on, Blether works out the mood of each reply and
 the voice matches it where the provider can: Mistral by picking the styled
-variant of the voice, OpenAI by a delivery instruction. Kokoro, ElevenLabs,
+variant of the voice, OpenAI and Gemini by a delivery instruction. Kokoro, ElevenLabs,
 xAI and Breeze sound the same either way. The preamble is not affected. Choose the
 classifier in the Tone group on the LLM page. If it fails, the reply is
 spoken neutral and the log says why.
@@ -258,6 +259,16 @@ Pocket voices, name it, and it appears in the profile voice pickers.
 Like Kokoro it runs through uv. It only starts once a profile uses it,
 and the first time it downloads the model; the menubar says "Pocket:
 warming up" meanwhile. Using the voices needs no Hugging Face account.
+
+## Gemini
+
+Google's [Gemini 3.8 Flash TTS](https://openrouter.ai/google/gemini-3.8-flash-tts)
+is reached through [OpenRouter](https://openrouter.ai), so it runs on
+OpenRouter credit rather than a Google account. Paste your OpenRouter key
+under Settings > TTS Providers > OpenRouter; any other model Blether
+reaches through OpenRouter will use the same key. It has thirty voices,
+from Zephyr to Sulafat, and follows tone when that is switched on. A sentence takes two to four
+seconds to arrive.
 
 ## Pronunciations
 

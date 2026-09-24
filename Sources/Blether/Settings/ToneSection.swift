@@ -11,7 +11,7 @@ struct ToneSection: View {
                     Text(source.displayName).tag(source)
                 }
             }
-            Text("Classifies each reply's mood so Mistral and OpenAI voices can match it: perky when the tests pass, sheepish when they do not. Jev is a small model built for this and costs almost nothing; your LLM works too but adds a second call per reply.")
+            Text("Classifies each reply's mood so Mistral, OpenAI and Gemini voices can match it: perky when the tests pass, sheepish when they do not. Jev is a small model built for this and costs almost nothing; your LLM works too but adds a second call per reply.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if settings.toneSource == .jev {

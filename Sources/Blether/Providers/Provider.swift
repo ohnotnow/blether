@@ -31,9 +31,13 @@ protocol Provider: Sendable {
     /// True for a provider slower than real time: the reply is split into sentence chunks, made one
     /// at a time in order, so the first plays while the rest are made (blether-vNbF9).
     var speaksInChunks: Bool { get }
+    /// The Keychain account holding this provider's key. Its own name unless it shares a key with
+    /// another, as everything served through OpenRouter does.
+    var keychainAccount: String { get }
 }
 
 extension Provider {
     var markupHint: String? { nil }
     var speaksInChunks: Bool { false }
+    var keychainAccount: String { name }
 }

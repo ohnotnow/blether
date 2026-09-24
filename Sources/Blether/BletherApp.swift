@@ -103,7 +103,7 @@ struct BletherApp: App {
         _appState = State(initialValue: state)
     }
 
-    /// The three local providers first, then the four API providers. Each reads its key from Keychain at call time, off
+    /// The three local providers first, then the five API providers. Each reads its key from Keychain at call time, off
     /// the main actor, through `apiKeyReader`.
     @MainActor
     private static func makeRegistry(settings: AppSettings, state: AppState) -> ProviderRegistry {
@@ -115,6 +115,7 @@ struct BletherApp: App {
             OpenAIProvider(apiKey: settings.apiKeyReader(for: "openai")),
             XAIProvider(apiKey: settings.apiKeyReader(for: "xai")),
             MistralProvider(apiKey: settings.apiKeyReader(for: "mistral")),
+            GeminiProvider(apiKey: settings.apiKeyReader(for: "openrouter")),
         ])
     }
 

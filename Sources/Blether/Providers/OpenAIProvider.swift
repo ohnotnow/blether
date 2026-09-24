@@ -47,7 +47,8 @@ struct OpenAIProvider: Provider {
         .confident: "Firm, calm and certain. Steady pace, no hedging, no upward inflection. Assured rather than excited: a statement, not a celebration.",
     ]
 
-    private struct Request: Encodable {
+    /// Gemini through OpenRouter takes the same body.
+    struct Request: Encodable {
         let model: String
         let voice: String
         let input: String

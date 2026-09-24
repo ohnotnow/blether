@@ -145,7 +145,7 @@ means the mic; "Listen on the network" is remote mode and unrelated.
   when a profile uses it, sending each clip's voice design and quality
   from `Settings/VoiceDesign.swift`; `PocketProvider` is a third helper,
   `Helpers/pocket.py`, with blether's own cloned voices in
-  `Helpers/pocket-voices/` (ant blether-RiaQz, blether-xhLum); the four API providers share
+  `Helpers/pocket-voices/` (ant blether-RiaQz, blether-xhLum); the five API providers (Gemini through OpenRouter) share
   `SpeechHTTP`), `PlaybackQueue` plays them one
   at a time. The profile chooses the provider. The log is `~/Library/Logs/blether.log`;
   lines that would carry spoken or heard words go through `Log.content`,

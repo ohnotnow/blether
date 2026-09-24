@@ -27,8 +27,8 @@ Everything is wired together at launch in `Sources/Blether/BletherApp.swift`.
    reply while listening is on.
 4. If tone is on, `Speech/ToneClassifier` labels the reply's mood (nine
    styles, neutral through sarcasm to shameful). Mistral expresses it by
-   picking the styled variant of the voice, OpenAI by a delivery
-   instruction. The other providers ignore it. Only the reply clip is
+   picking the styled variant of the voice, OpenAI and Gemini by a
+   delivery instruction. The other providers ignore it. Only the reply clip is
    coloured.
 5. `Speech/Pronunciations` swaps each clip's text for its phonetic
    spellings (below). The planner and the LLM never see the swapped text.
@@ -87,14 +87,18 @@ badge once any LLM has answered.
 ## Speech providers
 
 `Providers/Provider.swift` is the protocol and `ProviderRegistry` holds the
-seven: Kokoro, Breeze and Pocket, which run on this Mac, then ElevenLabs,
-OpenAI, xAI and Mistral. The four API providers
-share `SpeechHTTP`. Keys live in the macOS Keychain, one item each, under
-the service `uk.ohnotnow.blether` (`Settings/KeychainStore.swift`). OpenAI,
-xAI and Mistral share one key between their speech and LLM roles.
+eight: Kokoro, Breeze and Pocket, which run on this Mac, then ElevenLabs,
+OpenAI, xAI, Mistral and Gemini. The five API providers
+share `SpeechHTTP`. Keys live in the macOS Keychain under the service
+`uk.ohnotnow.blether` (`Settings/KeychainStore.swift`), one item per
+account. A provider's account is its own name unless it sets
+`keychainAccount`: Gemini uses "openrouter", so every model served through
+OpenRouter shares one key and the TTS Providers page shows one row for it
+(`ProviderRegistry.keyAccounts`). OpenAI, xAI and Mistral share one key
+between their speech and LLM roles.
 
 ElevenLabs, xAI and Mistral list the voices an account can use once a key
-is saved; OpenAI's list is fixed. ElevenLabs and xAI understand a few inline
+is saved; OpenAI's and Gemini's lists are fixed. ElevenLabs and xAI understand a few inline
 delivery tags, so the LLM is told it may add one or two for those.
 
 `Speech/VoiceSampler` renders and caches the per-voice sample behind the
@@ -172,6 +176,24 @@ every clip so the speech averages -20 dBFS, capped so no peak goes above
 Numbers, on an M6: the model loads in under a second once downloaded, a
 catalogue voice takes a second or two to fetch the first time, and speech
 comes out 13 to 17 times faster than it plays.
+
+### Gemini
+
+Google's Gemini 3.8 Flash TTS, reached through OpenRouter's speech
+endpoint (`https://openrouter.ai/api/v1/audio/speech`, model
+`google/gemini-3.8-flash-tts`) with an OpenRouter key. The body is the one
+OpenAI takes, so `GeminiProvider` reuses `OpenAIProvider.Request` and
+OpenAI's tone sentences as its `instructions`, which OpenRouter passes
+through and the model follows.
+
+OpenRouter's model page says mp3 or pcm, but mp3 is refused with a 400;
+only pcm works. It comes back headerless, as
+`audio/pcm;rate=24000;channels=1`, and the provider puts a 44-byte WAV
+header in front before the playback queue sees it. The 16-bit sample width
+is inferred from listening, not documented: if a clip ever sounds like
+static, look there first. Replies are capped at 800 characters, as for
+OpenAI, until the price per character is known. One sentence took 2 to 4
+seconds (ant blether-4Fcs3, blether-5jNEX).
 
 ## Profiles, personas and roles
 
