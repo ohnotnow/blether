@@ -168,13 +168,17 @@ final class SpeechPipeline: Sendable {
                 return nil
             }
             let profile = resolveProfile(named: name)
+            let provider = registry.provider(id: profile.providerID)
+            // Local models, often quantised, can turn another language into minutes of loud gibberish
+            // (Pocket on Chinese, 2026-09-24), so they quip in English (the user's decision, blether-xhLum).
+            let local = ProviderRegistry.localIDs.contains(provider.name)
             return QuipSnapshot(
                 generation: queue.generation,
                 persona: settings.persona(for: .notification, in: profile),
                 voice: settings.voiceID(for: .notification, in: profile),
-                languages: NotificationLanguages(parsing: settings.notificationLanguages),
+                languages: local ? NotificationLanguages(parsing: "") : NotificationLanguages(parsing: settings.notificationLanguages),
                 history: settings.recentQuips,
-                provider: registry.provider(id: profile.providerID),
+                provider: provider,
                 llm: makeLLM(settings),
                 pronunciations: settings.pronunciations
             )

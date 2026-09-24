@@ -3,7 +3,7 @@
 final class ProviderRegistry: Sendable {
     static let defaultID = "kokoro"
     /// Providers that run on this Mac and so have no API key.
-    static let localIDs: Set<String> = ["kokoro", "breeze"]
+    static let localIDs: Set<String> = ["kokoro", "breeze", "pocket"]
 
     /// In display order.
     let all: [any Provider]
@@ -25,6 +25,7 @@ final class ProviderRegistry: Sendable {
         switch id {
         case "kokoro": "Kokoro"
         case "breeze": "Breeze"
+        case "pocket": "Pocket"
         case "elevenlabs": "ElevenLabs"
         case "openai": "OpenAI"
         case "xai": "xAI"

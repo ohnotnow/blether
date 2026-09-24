@@ -83,6 +83,15 @@ struct BletherApp: App {
                     breeze.stop()
                 }
             }
+            if let pocket = registry.provider(id: "pocket") as? PocketProvider {
+                // Like Breeze: warm at launch only if a profile speaks with it, else on first use.
+                if settings.profiles.contains(where: { $0.providerID == "pocket" }) {
+                    Task { await pocket.start() }
+                }
+                NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+                    pocket.stop()
+                }
+            }
         }
         self.registry = registry
         self.ears = ears
@@ -94,13 +103,14 @@ struct BletherApp: App {
         _appState = State(initialValue: state)
     }
 
-    /// Kokoro and Breeze first, then the four API providers. Each reads its key from Keychain at call time, off
+    /// The three local providers first, then the four API providers. Each reads its key from Keychain at call time, off
     /// the main actor, through `apiKeyReader`.
     @MainActor
     private static func makeRegistry(settings: AppSettings, state: AppState) -> ProviderRegistry {
         ProviderRegistry([
             makeKokoro(settings: settings, state: state),
             makeBreeze(settings: settings, state: state),
+            makePocket(settings: settings, state: state),
             ElevenLabsProvider(apiKey: settings.apiKeyReader(for: "elevenlabs")),
             OpenAIProvider(apiKey: settings.apiKeyReader(for: "openai")),
             XAIProvider(apiKey: settings.apiKeyReader(for: "xai")),
@@ -147,6 +157,28 @@ struct BletherApp: App {
                 case .starting: state.breezeStatus = "Breeze: warming up"
                 case .ready: state.breezeStatus = nil
                 case .failed(let message): state.breezeStatus = "Breeze: \(message)"
+                }
+            }
+        }
+    }
+
+    /// Pocket through its bundled helper, or a stand-in that fails audibly when uv or the script is missing.
+    @MainActor
+    private static func makePocket(settings: AppSettings, state: AppState) -> any Provider {
+        guard let script = Bundle.main.url(forResource: "pocket", withExtension: "py") else {
+            state.pocketStatus = "Pocket: helper script missing from the app bundle"
+            return UnavailableProvider(name: "pocket", reason: "helper script missing")
+        }
+        guard let uv = UVLocator.find(override: settings.uvPath) else {
+            state.pocketStatus = "Pocket: uv not found, set its path in Settings > Advanced"
+            return UnavailableProvider(name: "pocket", reason: "uv not found")
+        }
+        return PocketProvider(executable: uv, arguments: ["run", script.path]) { newState in
+            Task { @MainActor in
+                switch newState {
+                case .starting: state.pocketStatus = "Pocket: warming up"
+                case .ready: state.pocketStatus = nil
+                case .failed(let message): state.pocketStatus = "Pocket: \(message)"
                 }
             }
         }
@@ -244,7 +276,7 @@ struct BletherApp: App {
             // Status lines live below Quit, in a dead-end after a divider, so a line vanishing (Kokoro
             // warming up, say) cannot shift the items above it under a moving mouse. The user clicked
             // Quit instead of Settings twice that way (2026-09-19).
-            let status = [appState.listenerError, appState.providerStatus, appState.breezeStatus, appState.listeningStatus, appState.channelError].compactMap { $0 }
+            let status = [appState.listenerError, appState.providerStatus, appState.breezeStatus, appState.pocketStatus, appState.listeningStatus, appState.channelError].compactMap { $0 }
             if !status.isEmpty {
                 Divider()
                 ForEach(status, id: \.self) { line in

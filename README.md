@@ -47,6 +47,7 @@ Text-to-speech, pick one per profile:
 |---|---|---|
 | [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-bf16) | Nothing - runs on-device | Default. English, French, Spanish, Italian, Portuguese, Hindi, Chinese |
 | [Breeze-TTS-2](https://huggingface.co/mlx-community/Breeze-TTS-2-mlx-4bit) | A fast Mac - runs on-device | Voices you describe in words. Non-commercial licence, see below |
+| [Pocket TTS](https://kyutai.org/blog/2026-01-13-pocket-tts/) | Nothing - runs on-device, on the CPU | English. Kyutai's voices plus three of Blether's own, see below |
 | ElevenLabs | API key | Lists your account's voices |
 | OpenAI | API key | Fixed voice list |
 | xAI | API key | Lists your account's voices |
@@ -151,7 +152,9 @@ permission prompt or an idle session, Blether speaks one short line in
 character, in a language picked at random from the list in Settings >
 General. The list is one language per line with a weight after a space,
 such as `French 5`; the name is sent to the LLM as written, so
-`Glaswegian 3` works too.
+`Glaswegian 3` works too. A profile that speaks through a local model
+(Kokoro, Breeze or Pocket) always quips in English: small local models
+can turn another language into a long stream of loud gibberish.
 
 ## First run
 
@@ -234,6 +237,22 @@ The model is under the BreezeBlue Research and Non-Commercial licence (see
 the [model page](https://huggingface.co/mlx-community/Breeze-TTS-2-mlx-4bit)).
 Blether's MIT licence does not change that: Breeze is for research and
 non-commercial use only.
+
+## Pocket
+
+[Pocket TTS](https://kyutai.org/blog/2026-01-13-pocket-tts/) is Kyutai's
+small text-to-speech model. It runs on the CPU and makes speech many times
+faster than it plays, so replies start almost at once and the voice stays
+the same from clip to clip. It speaks English; its French, German,
+Italian, Spanish and Portuguese voices read English with their accent.
+
+Blether ships three voices of its own for it: Servalan, Chanteuse and
+Danish Detective, cloned from speech made with voices designed on
+ElevenLabs. They are listed first, then Kyutai's catalogue.
+
+Like Kokoro it runs through uv. It only starts once a profile uses it,
+and the first time it downloads the model; the menubar says "Pocket:
+warming up" meanwhile. Using the voices needs no Hugging Face account.
 
 ## Pronunciations
 
@@ -357,6 +376,10 @@ Blether stands on other people's open source work:
 - [Breeze-TTS-2](https://huggingface.co/BreezeBlue/Breeze-TTS-2), the
   local model that speaks voice designs, as the 4-bit MLX conversion,
   also through mlx-audio. BreezeBlue Research and Non-Commercial licence.
+- [Pocket TTS](https://kyutai.org/blog/2026-01-13-pocket-tts/), Kyutai's
+  CPU text-to-speech model, run through their
+  [pocket-tts](https://pypi.org/project/pocket-tts/) package, which also
+  cloned Blether's own voices. The package is MIT, the model CC-BY-4.0.
 
 ## Licence
 

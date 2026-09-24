@@ -19,7 +19,9 @@ the LLM page gained provider presets. On 2026-09-22, on the user's new M6
 Mac, slice 13 added Breeze-TTS-2 as a second local provider that speaks in
 voice designs (written descriptions). On 2026-09-23 the user judged it on
 the quiet Mac: Better was too slow for long replies, so quality became a
-per-design Faster/Better setting (ant blether-vNbF9).
+per-design Faster/Better setting (ant blether-vNbF9). On 2026-09-24 Breeze's
+voice kept drifting (even switching sex), so Pocket TTS came in as a third
+local provider with three voices cloned from the user's ElevenLabs designs.
 What is left is slice 9 (retire the Python repos). README.md says what the app does; this file says how we
 work on it.
 
@@ -141,7 +143,9 @@ means the mic; "Listen on the network" is remote mode and unrelated.
   which keeps `Helpers/kokoro.py` alive and talks JSON lines to it;
   `BreezeProvider` does the same with `Helpers/breeze.py`, started only
   when a profile uses it, sending each clip's voice design and quality
-  from `Settings/VoiceDesign.swift`; the four API providers share
+  from `Settings/VoiceDesign.swift`; `PocketProvider` is a third helper,
+  `Helpers/pocket.py`, with blether's own cloned voices in
+  `Helpers/pocket-voices/` (ant blether-RiaQz, blether-xhLum); the four API providers share
   `SpeechHTTP`), `PlaybackQueue` plays them one
   at a time. The profile chooses the provider. The log is `~/Library/Logs/blether.log`;
   lines that would carry spoken or heard words go through `Log.content`,

@@ -421,6 +421,12 @@ final class SpeechPipelineTests: XCTestCase {
         XCTAssertEqual(settings.recentQuips, ["Typical."])
     }
 
+    func testALocalProviderQuipsInEnglishWhateverTheList() async {
+        let local = RecordingProvider(name: "pocket")
+        await pipeline(provider: local).quip()
+        XCTAssertEqual(local.calls.map(\.language), ["English"], "the list says French")
+    }
+
     func testQuipHistoryReachesThePromptAndGrows() async {
         settings.rememberQuip("Oh no.")
         await pipeline().quip()

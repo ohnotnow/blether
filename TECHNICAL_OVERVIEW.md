@@ -45,7 +45,10 @@ Everything is wired together at launch in `Sources/Blether/BletherApp.swift`.
 
 A Notification hook event goes through `Speech/QuipPlanner` instead: one
 short in-character line, in a language picked by weighted random from the
-list in Settings, with the last ten quips fed back to the LLM. If something
+list in Settings, with the last ten quips fed back to the LLM. A profile
+whose provider is local (`ProviderRegistry.localIDs`) skips the list and
+quips in English: Pocket's English model once read a Chinese quip as 58
+seconds of gibberish. If something
 is already playing the quip is dropped, and if the LLM fails you hear a
 beep.
 
@@ -84,7 +87,8 @@ badge once any LLM has answered.
 ## Speech providers
 
 `Providers/Provider.swift` is the protocol and `ProviderRegistry` holds the
-five: Kokoro, ElevenLabs, OpenAI, xAI and Mistral. The four API providers
+seven: Kokoro, Breeze and Pocket, which run on this Mac, then ElevenLabs,
+OpenAI, xAI and Mistral. The four API providers
 share `SpeechHTTP`. Keys live in the macOS Keychain, one item each, under
 the service `uk.ohnotnow.blether` (`Settings/KeychainStore.swift`). OpenAI,
 xAI and Mistral share one key between their speech and LLM roles.
@@ -124,6 +128,46 @@ is read as English.
 
 If uv is not on the path, the menubar says so and Settings > Listening has
 a field for its location (`Providers/UVLocator`).
+
+### Pocket
+
+[Pocket TTS](https://kyutai.org/blog/2026-01-13-pocket-tts/) runs through
+Kyutai's own `pocket-tts` package, PyTorch on the CPU, in a third helper,
+`Helpers/pocket.py`, on Kokoro's protocol. It starts when a profile uses
+it (at launch if one already does), like Breeze. The request carries no
+language: the English model reads every text.
+
+A Pocket voice is a saved state: a few megabytes of the model's memory
+after hearing a clip of someone speaking. Kyutai's catalogue of 26 is
+fetched by name from their ungated repo. Blether's own three live in
+`Helpers/pocket-voices/`, one `.safetensors` file per voice, bundled into
+the app as a folder; the helper lists them first, named after the file.
+An unknown voice id (a profile just switched from Kokoro) speaks as the
+default, `alba`. Each voice's state is loaded on first use and kept.
+
+Making a new voice needs the gated `kyutai/pocket-tts` weights, so accept
+the terms on Hugging Face and run `uvx hf auth login` first. Then, with
+`uv run --with pocket-tts --with soundfile python`:
+
+```python
+import soundfile as sf
+from pocket_tts import TTSModel, export_model_state
+
+model = TTSModel.load_model()
+audio, rate = sf.read("clip.mp3")
+sf.write("clip10.wav", audio[: rate * 10], rate)
+export_model_state(model.get_state_for_audio_prompt("clip10.wav"), "name.safetensors")
+```
+
+Ten seconds of clean speech is enough. A longer clip makes a larger file
+(about 6 MB at 10 seconds, 16 to 24 MB at 27 to 38) for no difference
+anyone could hear, and a 38-second clip made a voice that stopped after
+a second or two every time, while 30 seconds of the same clip was fine.
+Loading a saved state needs no Hugging Face account.
+
+Numbers, on an M6: the model loads in under a second once downloaded, a
+catalogue voice takes a second or two to fetch the first time, and speech
+comes out 13 to 17 times faster than it plays.
 
 ## Profiles, personas and roles
 
