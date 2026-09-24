@@ -142,28 +142,32 @@ after hearing a clip of someone speaking. Kyutai's catalogue of 26 is
 fetched by name from their ungated repo. Blether's own three live in
 `Helpers/pocket-voices/`, one `.safetensors` file per voice, bundled into
 the app as a folder; the helper lists them first, named after the file.
-An unknown voice id (a profile just switched from Kokoro) speaks as the
+Voices a person added live in `~/Library/Application Support/blether/pocket-voices`
+(`Settings/PocketVoices`, managed from `Settings/PocketSection`); the app
+passes that folder to the helper as its argument, and an added voice
+replaces a bundled or catalogue one with the same id. The helper reads the
+folders only at start-up, so adding or removing a voice restarts it
+(`HelperProcess.restart()`) rather than blether, which would close every
+channel. An unknown voice id (a profile just switched from Kokoro) speaks as the
 default, `alba`. Each voice's state is loaded on first use and kept.
 
-Making a new voice needs the gated `kyutai/pocket-tts` weights, so accept
-the terms on Hugging Face and run `uvx hf auth login` first. Then, with
-`uv run --with pocket-tts --with soundfile python`:
-
-```python
-import soundfile as sf
-from pocket_tts import TTSModel, export_model_state
-
-model = TTSModel.load_model()
-audio, rate = sf.read("clip.mp3")
-sf.write("clip10.wav", audio[: rate * 10], rate)
-export_model_state(model.get_state_for_audio_prompt("clip10.wav"), "name.safetensors")
-```
+Making a new voice needs the gated `kyutai/pocket-tts` weights: accept the
+terms on Hugging Face and run `uvx hf auth login` first. Then
+`uv run training/pocket_clone.py clip.mp3 "Name"` cuts the clip to its
+first ten seconds, calls `get_state_for_audio_prompt` and
+`export_model_state`, and writes a preview WAV beside the voice file
+(`training/README.md` is the walk-through).
 
 Ten seconds of clean speech is enough. A longer clip makes a larger file
 (about 6 MB at 10 seconds, 16 to 24 MB at 27 to 38) for no difference
 anyone could hear, and a 38-second clip made a voice that stopped after
 a second or two every time, while 30 seconds of the same clip was fine.
 Loading a saved state needs no Hugging Face account.
+
+A cloned voice also keeps its clip's loudness, so two voices can be 20 dB
+apart, and a loud one can peak past full scale and clip. The helper scales
+every clip so the speech averages -20 dBFS, capped so no peak goes above
+-1 dBFS. There is no switch to turn it off (ant blether-NkYN3).
 
 Numbers, on an M6: the model loads in under a second once downloaded, a
 catalogue voice takes a second or two to fetch the first time, and speech

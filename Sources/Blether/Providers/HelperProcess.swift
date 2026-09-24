@@ -103,6 +103,17 @@ actor HelperProcess {
         }
     }
 
+    /// Stops a running child and starts a fresh one, for a helper that reads its voices at start-up.
+    /// A child that is not running is left for the next request to start.
+    func restart() async {
+        guard live.withLock({ $0.process != nil }) else { return }
+        stop()
+        while live.withLock({ $0.process != nil }) {
+            guard (try? await Task.sleep(for: .milliseconds(50))) != nil else { return }
+        }
+        await start()
+    }
+
     /// Kills the child and cancels any respawn. Synchronous so applicationWillTerminate can call it.
     nonisolated func stop() {
         let process = live.withLock { live -> Process? in

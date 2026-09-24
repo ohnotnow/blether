@@ -1,7 +1,8 @@
 import Foundation
 
 /// Kyutai's Pocket TTS on the CPU, spoken to through its own resident helper (Helpers/pocket.py) via
-/// HelperProcess. Its voices are Kyutai's catalogue, listed by the helper when it is ready.
+/// HelperProcess. Its voices are blether's bundled ones, those added in Settings (`PocketVoices`) and
+/// Kyutai's catalogue, listed by the helper when it is ready.
 final class PocketProvider: Provider, Sendable {
     let name = "pocket"
     /// Local and many times faster than real time, so the same allowance as Kokoro.
@@ -18,6 +19,8 @@ final class PocketProvider: Provider, Sendable {
 
     func start() async { await helper.start() }
     nonisolated func stop() { helper.stop() }
+    /// After a voice is added or removed: the helper reads the voice folders only when it starts.
+    func reload() async { await helper.restart() }
 
     func voices() async throws -> [Voice] {
         await helper.start()

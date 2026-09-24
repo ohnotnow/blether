@@ -229,9 +229,11 @@ struct VoicesSection: View {
         .accessibilityLabel(playing ? "Stop the sample of \(name)" : "Play a sample of \(name)")
     }
 
-    /// What else decides a Breeze sample's sound: the design the provider will actually use (the
-    /// first one for an unknown id) and its quality. Nil for every other provider.
+    /// What else decides a sample's sound under the same id: for Breeze, the design the provider will
+    /// actually use (the first one for an unknown id) and its quality; for Pocket, when an added voice's
+    /// file last changed, so replacing it plays a fresh sample. Nil for every other provider.
     private func sampleVariant(_ voiceID: String) -> String? {
+        if editingProvider.name == "pocket" { return PocketVoices().stamp(id: voiceID) }
         guard editingProvider.name == "breeze" else { return nil }
         let designs = settings.voiceDesigns
         let design = designs.first { $0.id == voiceID } ?? designs.first

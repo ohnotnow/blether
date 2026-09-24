@@ -173,7 +173,7 @@ struct BletherApp: App {
             state.pocketStatus = "Pocket: uv not found, set its path in Settings > Advanced"
             return UnavailableProvider(name: "pocket", reason: "uv not found")
         }
-        return PocketProvider(executable: uv, arguments: ["run", script.path]) { newState in
+        return PocketProvider(executable: uv, arguments: ["run", script.path, PocketVoices.defaultDirectory.path]) { newState in
             Task { @MainActor in
                 switch newState {
                 case .starting: state.pocketStatus = "Pocket: warming up"

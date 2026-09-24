@@ -250,6 +250,11 @@ Blether ships three voices of its own for it: Servalan, Chanteuse and
 Danish Detective, cloned from speech made with voices designed on
 ElevenLabs. They are listed first, then Kyutai's catalogue.
 
+You can add your own. [training/README.md](training/README.md) explains
+how to turn a ten-second clip of speech into a voice file with
+`training/pocket_clone.py`; then add it under Settings > TTS Providers >
+Pocket voices, name it, and it appears in the profile voice pickers.
+
 Like Kokoro it runs through uv. It only starts once a profile uses it,
 and the first time it downloads the model; the menubar says "Pocket:
 warming up" meanwhile. Using the voices needs no Hugging Face account.

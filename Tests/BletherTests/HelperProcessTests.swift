@@ -195,6 +195,24 @@ final class HelperProcessTests: XCTestCase {
         XCTAssertFalse(helper.isRunning, "must not respawn after stop")
     }
 
+    func testRestartRunsAFreshChildThatIsReady() async throws {
+        helper = try makeHelper()
+        await helper.start()
+        let before = states.all.count
+        await helper.restart()
+        let state = await helper.state
+        XCTAssertEqual(state, .ready)
+        XCTAssertTrue(helper.isRunning)
+        XCTAssertEqual(Array(states.all.dropFirst(before)), [.failed("stopped"), .starting, .ready])
+    }
+
+    func testRestartLeavesAHelperThatNeverStartedAlone() async throws {
+        helper = try makeHelper()
+        await helper.restart()
+        XCTAssertFalse(helper.isRunning)
+        XCTAssertEqual(states.all, [])
+    }
+
     private func assertThrows(_ expected: HelperError, _ body: () async throws -> Void) async {
         do {
             try await body()

@@ -49,6 +49,7 @@ struct SettingsView: View {
                 case .providers:
                     ProvidersSection(settings: settings, registry: registry)
                     BreezeSection(settings: settings)
+                    PocketSection(registry: registry)
                 case .llm:
                     LLMSection(settings: settings)
                     ToneSection(settings: settings)
