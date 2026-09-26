@@ -1,13 +1,16 @@
 import KeyboardShortcuts
 import SwiftUI
 
-/// The on/off switches, the notification languages, the two global hotkeys, and remote mode.
+/// The on/off switches, the background stream, the notification languages, the global hotkeys, and remote mode.
 /// Each toggle says what off does, as visible text rather than hover help, so it can be read at any text size.
 struct GeneralSection: View {
     @Bindable var settings: AppSettings
     let speaking: Binding<Bool>
     /// Like speaking: switching listening off must also close an open microphone, so the app hands in its binding.
     let listening: Binding<Bool>
+    /// Like speaking: switching the stream off must also stop it, so the app hands in its binding.
+    let streaming: Binding<Bool>
+    let streamStatus: String?
     /// The Original field of a row just added, so Add puts the cursor where the typing goes.
     @FocusState private var editingOriginal: UUID?
 
@@ -18,6 +21,18 @@ struct GeneralSection: View {
             SettingToggle("Reply", "Off plays only the preamble.", isOn: $settings.speaksMainReply)
             SettingToggle("Notifications", "Off ignores Claude Code's Notification events. On speaks a short in-character line when Claude is waiting for you.", isOn: $settings.speaksNotifications)
             SettingToggle("Listen after Claude replies", "On opens the microphone when a reply finishes and sends what you say to that Claude Code session. Off never opens the microphone.", isOn: listening)
+        }
+        Section {
+            TextField("Stream URL", text: $settings.streamURL)
+            SettingToggle("Play background stream", "On plays the stream and quietens it while blether speaks or listens. Off stops it.", isOn: streaming)
+            if let streamStatus {
+                Label(streamStatus, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+            }
+        } header: {
+            Text("Background stream")
+        } footer: {
+            Text("A radio stream, or a .m3u or .pls link from a station's website. Music fades down while blether speaks; a podcast episode pauses instead. A changed URL is picked up when you switch the stream off and on again.")
         }
         Section {
             TextField("Notification languages", text: $settings.notificationLanguages, axis: .vertical)
@@ -49,6 +64,7 @@ struct GeneralSection: View {
         Section("Shortcuts") {
             KeyboardShortcuts.Recorder("Toggle speaking:", name: .toggleSpeaking)
             KeyboardShortcuts.Recorder("Stop talking:", name: .stopTalking)
+            KeyboardShortcuts.Recorder("Toggle background stream:", name: .toggleStream)
         }
         Section("Remote") {
             SettingToggle("Listen on the network", "On lets other machines on your network post replies here. Anyone on that network can make this Mac speak. Takes effect after a restart; use the button below.", isOn: $settings.listensOnLAN)

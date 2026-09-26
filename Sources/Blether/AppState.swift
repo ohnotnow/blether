@@ -14,4 +14,6 @@ final class AppState {
     var listeningStatus: String?
     /// Set once at launch if the channel listener could not bind; cleared only by relaunch.
     var channelError: String?
+    /// One line about the background stream (no URL, nothing would play); nil when it is fine or off.
+    var streamStatus: String?
 }

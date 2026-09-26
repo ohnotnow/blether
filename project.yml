@@ -47,6 +47,11 @@ targets:
         LSUIElement: true
         CFBundleDisplayName: blether
         NSHumanReadableCopyright: ""
+        # Most internet radio, and the .m3u and .pls files pointing at it, is plain http, which App
+        # Transport Security blocks by default (found 2026-09-26, ant blether-pHUqx). Not the
+        # media-only key: it does not cover fetching a .pls, and its presence makes macOS ignore this one.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         NSMicrophoneUsageDescription: "blether listens for your reply after Claude speaks. The microphone opens only while Listen after Claude replies is on."
   BletherTests:
     type: bundle.unit-test

@@ -5,4 +5,6 @@ extension KeyboardShortcuts.Name {
     @MainActor static let stopTalking = Self("stopTalking")
     /// Flip the master switch. No default; inert until the user records one.
     @MainActor static let toggleSpeaking = Self("toggleSpeaking")
+    /// Flip the background stream. No default; inert until the user records one.
+    @MainActor static let toggleStream = Self("toggleStream")
 }

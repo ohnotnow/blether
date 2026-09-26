@@ -12,6 +12,8 @@ struct BletherApp: App {
     private let channelServer: ChannelServer?
     private let registry: ProviderRegistry
     private let ears: Ears
+    private let stream: BackgroundStream
+    private let ducker: StreamDucker
 
     init() {
         if !AppRuntime.isRunningUnitTests { Log.rotateIfLarge() }
@@ -27,7 +29,14 @@ struct BletherApp: App {
             Task { @MainActor in reply(HeardWordsTool.run(action, words: words, settings: settings)) }
         })
         ears.deliver = Self.deliverer(channel: channel, state: state)
-        let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings, ears: ears) { settings in
+        let activity = SpeechActivity()
+        // A status line means nothing in the list would play, so the switch goes back off to match.
+        let stream = BackgroundStream(status: { status in
+            state.streamStatus = status
+            if status != nil { settings.playsStream = false }
+        })
+        let ducker = StreamDucker(stream: stream) { activity.inFlight > 0 || queue.isPlaying || ears.isListening }
+        let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings, ears: ears, activity: activity) { settings in
             let client = ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
             guard !settings.llmHasAnswered else { return client }
             return FirstAnswerLLM(wrapped: client) { Task { @MainActor in settings.llmHasAnswered = true } }
@@ -63,6 +72,13 @@ struct BletherApp: App {
             KeyboardShortcuts.onKeyUp(for: .toggleSpeaking) {
                 setSpeaking(!settings.isEnabled, settings: settings, queue: queue)
             }
+            KeyboardShortcuts.onKeyUp(for: .toggleStream) {
+                setStreaming(!settings.playsStream, settings: settings, stream: stream, state: state)
+            }
+            ducker.start()
+            if settings.playsStream {
+                setStreaming(true, settings: settings, stream: stream, state: state)
+            }
             if settings.listensAfterReply {
                 Task { await ears.warmUp() }
             }
@@ -95,6 +111,8 @@ struct BletherApp: App {
         }
         self.registry = registry
         self.ears = ears
+        self.stream = stream
+        self.ducker = ducker
         _settings = State(initialValue: settings)
         self.queue = queue
         self.pipeline = pipeline
@@ -195,6 +213,11 @@ struct BletherApp: App {
         Binding(get: { settings.listensAfterReply }, set: { setListening($0, settings: settings, ears: ears) })
     }
 
+    /// Off stops the stream at once; on reads the URL afresh. See `setStreaming`.
+    private var streaming: Binding<Bool> {
+        Binding(get: { settings.playsStream }, set: { setStreaming($0, settings: settings, stream: stream, state: appState) })
+    }
+
     /// Microphone, transcriber and sounds, with the status line going to the menubar. Where a transcript
     /// goes is set afterwards (`deliverer`), once the channel server exists.
     @MainActor
@@ -249,6 +272,8 @@ struct BletherApp: App {
             Toggle("Speaking", isOn: speaking)
                 .globalKeyboardShortcut(.toggleSpeaking)
             Toggle("Listening", isOn: listening)
+            Toggle("Background stream", isOn: streaming)
+                .globalKeyboardShortcut(.toggleStream)
             // "Default profile", not "Profile": blether has no current profile. A hook that names one
             // with ?profile= still gets that one; this changes only what an unnamed hook gets
             // (decided with the user 2026-09-19, ant blether-bREz9).
@@ -277,7 +302,7 @@ struct BletherApp: App {
             // Status lines live below Quit, in a dead-end after a divider, so a line vanishing (Kokoro
             // warming up, say) cannot shift the items above it under a moving mouse. The user clicked
             // Quit instead of Settings twice that way (2026-09-19).
-            let status = [appState.listenerError, appState.providerStatus, appState.breezeStatus, appState.pocketStatus, appState.listeningStatus, appState.channelError].compactMap { $0 }
+            let status = [appState.listenerError, appState.providerStatus, appState.breezeStatus, appState.pocketStatus, appState.listeningStatus, appState.channelError, appState.streamStatus].compactMap { $0 }
             if !status.isEmpty {
                 Divider()
                 ForEach(status, id: \.self) { line in
@@ -288,7 +313,7 @@ struct BletherApp: App {
             Image(nsImage: MenuBarIcon.image(enabled: settings.isEnabled))
         }
         Settings {
-            SettingsView(settings: settings, speaking: speaking, listening: listening, registry: registry)
+            SettingsView(settings: settings, speaking: speaking, listening: listening, streaming: streaming, streamStatus: appState.streamStatus, registry: registry)
         }
     }
 }

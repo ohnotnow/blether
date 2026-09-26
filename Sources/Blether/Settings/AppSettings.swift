@@ -48,6 +48,8 @@ final class AppSettings {
         static let heardWords = "heardWords"
         static let keepsRecentClips = "keepsRecentClips"
         static let pronunciations = "pronunciations"
+        static let streamURL = "streamURL"
+        static let playsStream = "playsStream"
     }
 
     /// The old claude-speaks weighting (English rare, everything else 5), restricted to the languages
@@ -364,6 +366,19 @@ final class AppSettings {
     }
 
     /// Where `uv` lives, when it is not in one of the usual places. Empty means look for it.
+    /// The one background stream (ant blether-pHUqx): a direct stream, or a .m3u or .pls link. Read when
+    /// the stream is switched on, so an edit takes effect on the next switch-on.
+    var streamURL: String {
+        get { _ = revision; return defaults.string(forKey: Key.streamURL) ?? "" }
+        set { defaults.set(newValue, forKey: Key.streamURL); revision += 1 }
+    }
+
+    /// Off by default. Remembered, so a stream left on plays again at launch (a lean the user approved, 2026-09-26).
+    var playsStream: Bool {
+        get { _ = revision; return defaults.bool(forKey: Key.playsStream) }
+        set { defaults.set(newValue, forKey: Key.playsStream); revision += 1 }
+    }
+
     var uvPath: String {
         get { _ = revision; return defaults.string(forKey: Key.uvPath) ?? "" }
         set { defaults.set(newValue, forKey: Key.uvPath); revision += 1 }

@@ -25,6 +25,9 @@ struct SettingsView: View {
     /// Flipping speaking must also silence the current clip, so the app hands in the binding it uses everywhere else.
     let speaking: Binding<Bool>
     let listening: Binding<Bool>
+    let streaming: Binding<Bool>
+    /// Why the stream is not playing, shown beside its switch as well as below Quit.
+    let streamStatus: String?
     let registry: ProviderRegistry
     /// Remembered for the window's life only.
     @State private var page: SettingsPage? = .general
@@ -43,7 +46,7 @@ struct SettingsView: View {
         } detail: {
             Form {
                 switch page ?? .general {
-                case .general: GeneralSection(settings: settings, speaking: speaking, listening: listening)
+                case .general: GeneralSection(settings: settings, speaking: speaking, listening: listening, streaming: streaming, streamStatus: streamStatus)
                 case .profiles: VoicesSection(settings: settings, registry: registry)
                 case .personas: PersonasSection(settings: settings)
                 case .providers:
