@@ -46,6 +46,11 @@ enum LLMProvider: String, CaseIterable, Sendable {
         }
     }
 
+    /// On 2026-09-26 OpenAI answered 400 "Unsupported parameter: 'max_tokens' ... Use
+    /// 'max_completion_tokens' instead" for gpt-5.6-luna and gpt-6-luna. The others keep the older
+    /// name, which Ollama is known to accept; whether they take the new one was not checked.
+    var maxTokensField: String { self == .openai ? "max_completion_tokens" : "max_tokens" }
+
     var sharesKeyWithSpeech: Bool {
         switch self {
         case .openai, .xai, .mistral: true

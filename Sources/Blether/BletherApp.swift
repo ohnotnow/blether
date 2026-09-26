@@ -37,7 +37,7 @@ struct BletherApp: App {
         })
         let ducker = StreamDucker(stream: stream) { activity.inFlight > 0 || queue.isPlaying || ears.isListening }
         let pipeline = SpeechPipeline(registry: registry, queue: queue, settings: settings, ears: ears, activity: activity) { settings in
-            let client = ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody)
+            let client = ChatCompletionsClient(baseURL: settings.llmBaseURL, model: settings.llmModel, apiKey: settings.llmAPIKey, extraBody: settings.llmExtraBody, maxTokensField: settings.llmProvider.maxTokensField)
             guard !settings.llmHasAnswered else { return client }
             return FirstAnswerLLM(wrapped: client) { Task { @MainActor in settings.llmHasAnswered = true } }
         }

@@ -24,6 +24,18 @@ final class ChatCompletionsClientTests: XCTestCase {
         _ = try await client(extraBody: extra).complete(system: "s", user: "u")
     }
 
+    func testTheTokenBudgetGoesUnderTheNameTheProviderWants() async throws {
+        URLProtocolStub.install { request in
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+            XCTAssertEqual(json["max_completion_tokens"] as? Int, 16000)
+            XCTAssertNil(json["max_tokens"])
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(Self.okBody.utf8))
+        }
+        var openAI = client()
+        openAI.maxTokensField = LLMProvider.openai.maxTokensField
+        _ = try await openAI.complete(system: "s", user: "u")
+    }
+
     func testInvalidExtraBodyIsIgnored() async throws {
         URLProtocolStub.install { request in
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])

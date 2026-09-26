@@ -14,6 +14,8 @@ struct ChatCompletionsClient: LLM {
     /// JSON object text merged into the request body. Its fields win over ours, except
     /// `model` and `messages`. Invalid JSON is logged and ignored.
     var extraBody: String = "{}"
+    /// The name the token budget goes under. OpenAI's newer models reject `max_tokens` (2026-09-26).
+    var maxTokensField = "max_tokens"
     var session: URLSession = .shared
 
     func complete(system: String, user: String) async throws -> String {
@@ -57,6 +59,7 @@ struct ChatCompletionsClient: LLM {
             messages: [.init(role: "system", content: system), .init(role: "user", content: user)]
         ))
         guard var merged = try JSONSerialization.jsonObject(with: base) as? [String: Any] else { return base }
+        merged[maxTokensField] = Self.maxTokens
         if let extra = ExtraBody.parse(extraBody) {
             for (key, value) in extra where key != "model" && key != "messages" { merged[key] = value }
         } else {
@@ -68,13 +71,7 @@ struct ChatCompletionsClient: LLM {
     private struct Request: Encodable {
         let model: String
         let messages: [Message]
-        let maxTokens = ChatCompletionsClient.maxTokens
         let stream = false
-
-        enum CodingKeys: String, CodingKey {
-            case model, messages, stream
-            case maxTokens = "max_tokens"
-        }
 
         struct Message: Encodable {
             let role: String
