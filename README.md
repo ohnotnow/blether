@@ -1,5 +1,7 @@
 # Blether
 
+<img src="docs/icon.png" width="256" alt="Blether's icon: a smiling robot head with glowing sound waves coming from its ears, on a navy rounded square">
+
 Blether gives Claude Code a voice and, if you want, ears. It is a macOS
 menubar app that reads Claude's replies aloud in a voice you choose, and
 can listen for your answer so you reply by talking into your mic.
@@ -83,9 +85,10 @@ brew install xcodegen uv
 Then:
 
 ```sh
-make        # builds build/Build/Products/Release/Blether.app
-make run    # builds and launches it
-make test   # runs the unit tests
+make install  # builds it, copies it to /Applications and launches it
+make          # just builds build/Build/Products/Release/Blether.app
+make run      # builds and launches it from the build folder
+make test     # runs the unit tests
 ```
 
 A robot head appears in the menubar. There is no Dock icon and no main
