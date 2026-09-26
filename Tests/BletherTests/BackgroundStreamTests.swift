@@ -118,4 +118,24 @@ final class BackgroundStreamTests: XCTestCase {
         XCTAssertEqual(player.paused, 0)
         XCTAssertNil(stream.fade)
     }
+
+    func testFadeOutAndStopStopsThenReports() async {
+        stream.start(urls: [a])
+        stream.fadeOutAndStop(saying: "gone")
+        XCTAssertTrue(stream.isPlaying)  // still fading
+        await settle()
+        XCTAssertFalse(stream.isPlaying)
+        XCTAssertEqual(player.stopped, 1)
+        XCTAssertEqual(statuses.last, "gone")
+    }
+
+    func testADuckDuringTheFadeOutKeepsItPlaying() async {
+        stream.start(urls: [a])
+        stream.fadeOutAndStop(saying: "gone")
+        stream.duck()
+        await settle()
+        XCTAssertTrue(stream.isPlaying)
+        XCTAssertEqual(player.volume, BackgroundStream.duckedVolume, accuracy: 0.001)
+        XCTAssertFalse(statuses.contains("gone"))
+    }
 }

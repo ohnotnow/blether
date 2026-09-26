@@ -90,6 +90,17 @@ final class BackgroundStream {
         }
     }
 
+    /// Fades to silence, stops, and shows `message` as the status line, which also turns the switch off.
+    /// A duck during the fade cancels it and the stream plays on: something from Claude arrived.
+    func fadeOutAndStop(saying message: String) {
+        guard isPlaying else { return }
+        Log.log("stream: \(message)")
+        fadeTo(0) { [weak self] in
+            self?.stop()
+            self?.status(message)
+        }
+    }
+
     private func failed() {
         guard isPlaying else { return }
         index += 1
@@ -104,7 +115,7 @@ final class BackgroundStream {
         player.play(urls[index])
     }
 
-    private func fadeTo(_ target: Float) {
+    private func fadeTo(_ target: Float, then done: (@MainActor () -> Void)? = nil) {
         fade?.cancel()
         let from = player.volume
         let steps = Self.fadeSteps
@@ -115,6 +126,7 @@ final class BackgroundStream {
                 guard !Task.isCancelled, let self else { return }
                 self.player.volume = from + (target - from) * Float(step) / Float(steps)
             }
+            done?()
         }
     }
 }
