@@ -1,6 +1,6 @@
 # Blether
 
-<img src="docs/icon.png" width="256" alt="Blether's icon: a smiling robot head with glowing sound waves coming from its ears, on a navy rounded square">
+<img src="docs/icon.png" width="256px" alt="Blether's icon: a smiling robot head with glowing sound waves coming from its ears, on a navy rounded square">
 
 Blether gives Claude Code a voice and, if you want, ears. It is a macOS
 menubar app that reads Claude's replies aloud in a voice you choose, and
