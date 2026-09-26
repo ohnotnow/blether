@@ -10,11 +10,13 @@ final class FakeStreamPlayer: StreamPlayer {
     var volume: Float = 1
     var isLive: Bool? = true
     var onFailed: (() -> Void)?
+    var onReady: (() -> Void)?
     func play(_ url: URL) { played.append(url) }
     func pause() { paused += 1 }
     func resume() { resumed += 1 }
     func stop() { stopped += 1 }
     func fail() { onFailed?() }
+    func ready() { onReady?() }
 }
 
 @MainActor
@@ -54,6 +56,24 @@ final class BackgroundStreamTests: XCTestCase {
         XCTAssertFalse(stream.isPlaying)
         XCTAssertEqual(player.played, [a, b])
         XCTAssertEqual(statuses.last, "Stream: could not reach or play a.example.com")
+    }
+
+    func testOnPlayingRunsOnceWhenAURLIsReady() {
+        var played = 0
+        stream.start(urls: [a, b]) { played += 1 }
+        player.fail()
+        XCTAssertEqual(played, 0, "a failure is not playing")
+        player.ready()
+        player.ready()
+        XCTAssertEqual(played, 1)
+    }
+
+    func testOnPlayingNeverRunsWhenNothingPlays() {
+        var played = 0
+        stream.start(urls: [a]) { played += 1 }
+        player.fail()
+        player.ready()
+        XCTAssertEqual(played, 0)
     }
 
     func testDuckingALiveStreamFadesToAQuarterAndBack() async {

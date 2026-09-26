@@ -42,7 +42,8 @@ func setStreaming(_ on: Bool, settings: AppSettings, stream: BackgroundStream, s
             let urls = try await StreamPlaylist.resolve(url, fetch: fetch)
             // Switched off while the playlist was being fetched: off wins.
             guard settings.playsStream else { return }
-            stream.start(urls: urls)
+            // The URL as typed or picked, not the playlist entry that played: that is the link the user knows.
+            stream.start(urls: urls) { settings.rememberStream(text) }
         } catch {
             Log.log("stream: could not read \(url.absoluteString): \(error)")
             settings.playsStream = false

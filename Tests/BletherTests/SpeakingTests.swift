@@ -48,6 +48,23 @@ final class SpeakingTests: XCTestCase {
         XCTAssertEqual(player.played, [URL(string: "http://ice.example.com/live")!])
     }
 
+    func testAStreamIsRememberedOnlyOnceItPlays() async {
+        settings.streamURL = " http://example.com/station.pls "
+        await setStreaming(true, settings: settings, stream: stream, state: state) { _ in
+            Data("[playlist]\nFile1=http://ice.example.com/live\n".utf8)
+        }?.value
+        XCTAssertEqual(settings.recentStreams, [])
+        player.ready()
+        XCTAssertEqual(settings.recentStreams, ["http://example.com/station.pls"], "the link as typed, trimmed, not the playlist entry")
+    }
+
+    func testAStreamThatFailsIsNotRemembered() async {
+        settings.streamURL = "http://example.com/live"
+        await setStreaming(true, settings: settings, stream: stream, state: state)?.value
+        player.fail()
+        XCTAssertEqual(settings.recentStreams, [])
+    }
+
     func testAnUnreadablePlaylistSwitchesBackOff() async {
         settings.streamURL = "http://example.com/station.pls"
         await setStreaming(true, settings: settings, stream: stream, state: state) { _ in throw URLError(.notConnectedToInternet) }?.value

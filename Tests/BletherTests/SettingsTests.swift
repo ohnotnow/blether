@@ -137,6 +137,25 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(self.settings.recentQuips, settings.recentQuips, "a second instance sees the same history")
     }
 
+    @MainActor func testRememberStreamKeepsTenNewestFirstWithoutRepeats() {
+        let settings = settings
+        for n in 1...12 { settings.rememberStream("http://\(n).example.com") }
+        settings.rememberStream("http://5.example.com")
+        XCTAssertEqual(settings.recentStreams.count, 10)
+        XCTAssertEqual(settings.recentStreams.first, "http://5.example.com")
+        XCTAssertEqual(settings.recentStreams.filter { $0 == "http://5.example.com" }.count, 1)
+        XCTAssertEqual(settings.recentStreams.last, "http://3.example.com")
+        XCTAssertEqual(self.settings.recentStreams, settings.recentStreams, "a second instance sees the same history")
+    }
+
+    @MainActor func testForgetStreamRemovesOnlyThatStream() {
+        let settings = settings
+        settings.rememberStream("http://a.example.com")
+        settings.rememberStream("http://b.example.com")
+        settings.forgetStream("http://a.example.com")
+        XCTAssertEqual(settings.recentStreams, ["http://b.example.com"])
+    }
+
     @MainActor func testTogglesRoundTripThroughASecondInstance() {
         let first = settings
         first.isEnabled = false

@@ -14,6 +14,14 @@ struct GeneralSection: View {
     /// The Original field of a row just added, so Add puts the cursor where the typing goes.
     @FocusState private var editingOriginal: UUID?
 
+    private var currentStream: String { settings.streamURL.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// A stream picked from Recent replaces the one playing now; switching on again restarts with the new URL.
+    private func pickStream(_ url: String) {
+        settings.streamURL = url
+        if streaming.wrappedValue { streaming.wrappedValue = true }
+    }
+
     var body: some View {
         Section {
             SettingToggle("Speaking", "Off drops every reply before any LLM or speech work.", isOn: speaking)
@@ -23,7 +31,23 @@ struct GeneralSection: View {
             SettingToggle("Listen after Claude replies", "On opens the microphone when a reply finishes and sends what you say to that Claude Code session. Off never opens the microphone.", isOn: listening)
         }
         Section {
-            TextField("Stream URL", text: $settings.streamURL)
+            LabeledContent("Stream URL") {
+                HStack {
+                    TextField("Stream URL", text: $settings.streamURL)
+                        .labelsHidden()
+                    Menu("Recent") {
+                        ForEach(settings.recentStreams, id: \.self) { url in
+                            Button(url) { pickStream(url) }
+                        }
+                        Divider()
+                        Button("Forget current stream") { settings.forgetStream(currentStream) }
+                            .disabled(!settings.recentStreams.contains(currentStream))
+                    }
+                    .fixedSize()
+                    .disabled(settings.recentStreams.isEmpty)
+                    .accessibilityLabel("Recent streams")
+                }
+            }
             SettingToggle("Play background stream", "On plays the stream and quietens it while blether speaks or listens. Off stops it.", isOn: streaming)
             if let streamStatus {
                 Label(streamStatus, systemImage: "exclamationmark.triangle")
@@ -32,7 +56,7 @@ struct GeneralSection: View {
         } header: {
             Text("Background stream")
         } footer: {
-            Text("A radio stream, or a .m3u or .pls link from a station's website. Music fades down while blether speaks; a podcast episode pauses instead. A changed URL is picked up when you switch the stream off and on again.")
+            Text("A radio stream, or a .m3u or .pls link from a station's website. Music fades down while blether speaks; a podcast episode pauses instead. A typed URL is picked up when you switch the stream off and on again; one picked from Recent plays straight away. Recent lists streams that played.")
         }
         Section {
             TextField("Notification languages", text: $settings.notificationLanguages, axis: .vertical)

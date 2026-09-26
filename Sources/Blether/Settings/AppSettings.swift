@@ -49,6 +49,7 @@ final class AppSettings {
         static let keepsRecentClips = "keepsRecentClips"
         static let pronunciations = "pronunciations"
         static let streamURL = "streamURL"
+        static let recentStreams = "recentStreams"
         static let playsStream = "playsStream"
     }
 
@@ -65,6 +66,7 @@ final class AppSettings {
     Chinese (Simplified) 5
     """
     static let quipHistoryLimit = 10
+    static let streamHistoryLimit = 10
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let keychain: KeychainStore
@@ -371,6 +373,21 @@ final class AppSettings {
     var streamURL: String {
         get { _ = revision; return defaults.string(forKey: Key.streamURL) ?? "" }
         set { defaults.set(newValue, forKey: Key.streamURL); revision += 1 }
+    }
+
+    /// Stream URLs that played, newest first, for the Recent menu. Only a stream that reached ready to
+    /// play is remembered, so a list of dead stations does not fill it (the user's decision, 2026-09-26).
+    private(set) var recentStreams: [String] {
+        get { _ = revision; return defaults.stringArray(forKey: Key.recentStreams) ?? [] }
+        set { defaults.set(newValue, forKey: Key.recentStreams); revision += 1 }
+    }
+
+    func rememberStream(_ url: String) {
+        recentStreams = Array(([url] + recentStreams.filter { $0 != url }).prefix(Self.streamHistoryLimit))
+    }
+
+    func forgetStream(_ url: String) {
+        recentStreams.removeAll { $0 == url }
     }
 
     /// Off by default. Remembered, so a stream left on plays again at launch (a lean the user approved, 2026-09-26).

@@ -12,6 +12,8 @@ protocol StreamPlayer: AnyObject {
     var isLive: Bool? { get }
     /// Called when the current URL fails to start, or fails part way through.
     var onFailed: (() -> Void)? { get set }
+    /// Called when the current URL is ready to play.
+    var onReady: (() -> Void)? { get set }
 }
 
 /// Plays the user's one background stream and makes room for blether's voice (ant blether-pHUqx):
@@ -30,6 +32,8 @@ final class BackgroundStream {
     private var index = 0
     private var ducked = false
     private var pausedForDuck = false
+    /// Called once, the first time any URL in the list turns out to play. Cleared by `stop()`.
+    private var onPlaying: (@MainActor () -> Void)?
     /// The fade in progress; internal so tests can wait for it.
     private(set) var fade: Task<Void, Never>?
 
@@ -42,13 +46,16 @@ final class BackgroundStream {
         self.status = status
         self.sleep = sleep
         player.onFailed = { [weak self] in self?.failed() }
+        player.onReady = { [weak self] in self?.ready() }
     }
 
     /// Plays the first URL; each failure moves on to the next, once through the list (mirrors from a .pls).
-    func start(urls: [URL]) {
+    /// `onPlaying` runs once one of them is ready to play, so only streams that worked reach the history.
+    func start(urls: [URL], onPlaying: (@MainActor () -> Void)? = nil) {
         stop()
         guard let first = urls.first else { return }
         self.urls = urls
+        self.onPlaying = onPlaying
         index = 0
         isPlaying = true
         status(nil)
@@ -63,6 +70,7 @@ final class BackgroundStream {
         isPlaying = false
         ducked = false
         pausedForDuck = false
+        onPlaying = nil
         player.volume = 1
     }
 
@@ -101,6 +109,12 @@ final class BackgroundStream {
         }
     }
 
+    private func ready() {
+        guard isPlaying, let onPlaying else { return }
+        self.onPlaying = nil
+        onPlaying()
+    }
+
     private func failed() {
         guard isPlaying else { return }
         index += 1
@@ -137,6 +151,7 @@ final class AVStreamPlayer: StreamPlayer {
     private var statusObservation: NSKeyValueObservation?
     private var failureObserver: NSObjectProtocol?
     var onFailed: (() -> Void)?
+    var onReady: (() -> Void)?
 
     var volume: Float {
         get { player.volume }
@@ -152,9 +167,15 @@ final class AVStreamPlayer: StreamPlayer {
         stop()
         let item = AVPlayerItem(url: url)
         statusObservation = item.observe(\.status) { [weak self] item, _ in
-            guard item.status == .failed else { return }
-            Log.log("stream: \(item.error.map { "\($0)" } ?? "failed")")
-            Task { @MainActor in self?.onFailed?() }
+            switch item.status {
+            case .readyToPlay:
+                Task { @MainActor in self?.onReady?() }
+            case .failed:
+                Log.log("stream: \(item.error.map { "\($0)" } ?? "failed")")
+                Task { @MainActor in self?.onFailed?() }
+            default:
+                break
+            }
         }
         failureObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.onFailed?() }
