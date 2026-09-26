@@ -76,7 +76,7 @@ final class BackgroundStreamTests: XCTestCase {
         XCTAssertEqual(played, 0)
     }
 
-    func testDuckingALiveStreamFadesToAQuarterAndBack() async {
+    func testDuckingALiveStreamFadesDownAndBack() async {
         stream.start(urls: [a])
         stream.duck()
         await settle()

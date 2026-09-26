@@ -20,8 +20,8 @@ protocol StreamPlayer: AnyObject {
 /// a live stream fades down and back up, a recording pauses and resumes so nothing is missed.
 @MainActor
 final class BackgroundStream {
-    /// Starting guesses, the user's (2026-09-26), to be tuned by ear.
-    static let duckedVolume: Float = 0.25
+    /// The user's starting guesses (2026-09-26), tuned by ear: ducking to 0.25 was still a little loud under speech, so 0.15.
+    static let duckedVolume: Float = 0.15
     static let fadeSeconds = 2.0
     private static let fadeSteps = 20
 
