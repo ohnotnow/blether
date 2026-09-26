@@ -322,6 +322,35 @@ as `<channel source="blether">`.
 Relaunching Blether closes every channel connection and Claude Code does
 not reopen them; each session runs `/mcp` and reconnects, or restarts.
 
+## Background stream
+
+`Stream/` plays one stream URL through AVPlayer and makes room for the
+voice. The menubar item, the hotkey, the settings toggle and launch all go
+through `setStreaming` in `Speaking.swift`, which reads the URL afresh each
+time. `StreamPlaylist` follows one level of .m3u or .pls; a .pls's extra
+entries are mirrors, tried in order if the first fails, then a status line
+and the switch goes off. There is no endless reconnect. Plain http is
+allowed (`NSAllowsArbitraryLoads` in project.yml): the media-only ATS key
+does not cover fetching a .pls.
+
+`StreamDucker` ticks every quarter-second. Busy means a reply or quip in
+flight (`SpeechActivity`, counted from the moment the hook arrives, so the
+music is already down before the slow LLM finishes), the queue playing, or
+the mic open. Busy ducks at once; the stream comes back only after two
+seconds of continuous quiet, so the gap between preamble and reply does not
+bounce it. A live stream (indefinite duration, or not yet known) fades to a
+quarter over two seconds; a recording pauses and resumes.
+
+The same tick is the auto-off. The ducker keeps the last busy moment,
+cleared while the stream is off, so the clock also starts at switch-on.
+After `StreamDucker.idleMinutes` (60, a constant on purpose) with nothing
+busy, `BackgroundStream.fadeOutAndStop` fades to silence, stops, and
+reports "Stream: switched off after 60 minutes with nothing from Claude"
+through the status closure, which also sets `playsStream` off, so the
+toggle, the settings and the next launch agree. A duck during that
+two-second fade cancels it and the stream plays on. The decisions are in
+`ant show blether-pHUqx` and `blether-PtxVv`.
+
 ## Remote mode
 
 "Listen on the network" rebinds the hook server to every interface. There
@@ -336,8 +365,9 @@ claude-speaks `remote-hook.py` sends is accepted and ignored.
 `speaksMainReply`, `speaksNotifications`, `notificationLanguages`,
 `recentQuips`, `toneSource`, `listensOnLAN`, `listensAfterReply`,
 `microphoneID`, `uvPath`, `heardWords`, `pronunciations`,
-`keepsRecentClips`, and the two shortcuts under
-`KeyboardShortcuts_stopTalking` and `KeyboardShortcuts_toggleSpeaking`. An
+`keepsRecentClips`, `streamURL`, `playsStream`, and the three shortcuts
+under `KeyboardShortcuts_stopTalking`, `KeyboardShortcuts_toggleSpeaking`
+and `KeyboardShortcuts_toggleStream`. An
 older `roles` key is read once to seed the Default profile and never
 written again. The LLM key, the provider keys and the Jev key are in
 Keychain only.

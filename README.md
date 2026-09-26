@@ -360,6 +360,21 @@ to switch Blether off. Off drops a reply before any LLM call or speech
 work, and the robot's eyes and mouth close. Two smaller switches on the
 General page drop just the preamble or just the reply.
 
+## Background music
+
+Blether can play a radio stream while you work and get it out of the way
+when Claude has something to say. Paste a stream URL into "Stream URL"
+on the General page (a direct stream, or the .m3u or .pls link a
+station's website offers) and tick "Background stream" in the menubar, or
+record a "Toggle background stream" shortcut. Music fades down while
+Blether speaks or listens and comes back up once things go quiet. A
+podcast episode pauses and resumes instead, so you do not miss anything.
+A changed URL is picked up the next time you switch the stream on.
+
+If you leave the music on and wander off (or nod off on the sofa), it
+fades out and switches itself off after an hour with nothing from Claude,
+and the menubar says so. Switch it back on whenever you like.
+
 ## Logs
 
 Blether writes one line per event to `~/Library/Logs/blether.log`. The
