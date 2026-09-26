@@ -12,19 +12,22 @@ final class SpeechPipeline: Sendable {
     private let ears: (any EarsArming)?
     /// Where spoken clips are copied when "Keep recent clips" is on.
     private let recent: RecentClips
+    /// Counts replies and quips being worked on, so the background stream can duck before the voice starts.
+    private let activity: SpeechActivity?
 
-    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), activity: SpeechActivity? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
         self.registry = registry
         self.queue = queue
         self.settings = settings
         self.ears = ears
         self.recent = recent
+        self.activity = activity
         self.makeLLM = makeLLM
     }
 
     /// One provider for everything; the tests and any single-provider caller.
-    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
-        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, ears: ears, recent: recent, makeLLM: makeLLM)
+    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), activity: SpeechActivity? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, ears: ears, recent: recent, activity: activity, makeLLM: makeLLM)
     }
 
     /// Copies a clip about to be played into the recent folder when the toggle is on. Read at
@@ -58,6 +61,12 @@ final class SpeechPipeline: Sendable {
             Log.log("speaking is off, reply dropped")
             return
         }
+        await MainActor.run { activity?.begin() }
+        await speakEnabled(text, profile: name, session: session)
+        await MainActor.run { activity?.end() }
+    }
+
+    private func speakEnabled(_ text: String, profile name: String?, session: SessionKey?) async {
         let snapshot = await MainActor.run {
             let profile = resolveProfile(named: name)
             let llm = makeLLM(settings)
@@ -184,6 +193,12 @@ final class SpeechPipeline: Sendable {
             )
         }
         guard let snapshot else { return }
+        await MainActor.run { activity?.begin() }
+        await quip(snapshot)
+        await MainActor.run { activity?.end() }
+    }
+
+    private func quip(_ snapshot: QuipSnapshot) async {
         let provider = snapshot.provider
 
         guard let quip = await QuipPlanner(llm: snapshot.llm).plan(persona: snapshot.persona, languages: snapshot.languages, history: snapshot.history) else {

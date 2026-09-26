@@ -72,6 +72,23 @@ private struct StopsThenFailsProvider: Provider {
     }
 }
 
+/// Records how many pieces of work the pipeline says are in flight at the moment each clip is synthesised.
+private final class ActivityPeekingProvider: Provider, @unchecked Sendable {
+    let name = "peeking"
+    let maxMainCharacters = 800
+    let activity: SpeechActivity
+    private let lock = NSLock()
+    private var peeked: [Int] = []
+    var seen: [Int] { lock.withLock { peeked } }
+    init(activity: SpeechActivity) { self.activity = activity }
+    func voices() async throws -> [Voice] { [] }
+    func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip {
+        let inFlight = await activity.inFlight
+        lock.withLock { peeked.append(inFlight) }
+        return makeTestClip()
+    }
+}
+
 @MainActor
 final class FakeEars: EarsArming {
     private(set) var armed: [SessionKey] = []
@@ -101,6 +118,7 @@ final class SpeechPipelineTests: XCTestCase {
     }
 
     private let ears = FakeEars()
+    private let activity = SpeechActivity()
     private let session = SessionKey(id: "s-1", pid: 77)
 
     private let recentDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("blether-pipeline-recent-\(UUID().uuidString)", isDirectory: true)
@@ -108,7 +126,7 @@ final class SpeechPipelineTests: XCTestCase {
 
     private func pipeline(provider: (any Provider)? = nil) -> SpeechPipeline {
         let llm = llm
-        return SpeechPipeline(provider: provider ?? self.provider, queue: queue, settings: settings, ears: ears, recent: RecentClips(directory: recentDirectory)) { [weak self] _ in
+        return SpeechPipeline(provider: provider ?? self.provider, queue: queue, settings: settings, ears: ears, recent: RecentClips(directory: recentDirectory), activity: activity) { [weak self] _ in
             MainActor.assumeIsolated { self?.makeLLMCalls += 1 }
             return llm
         }
@@ -483,5 +501,35 @@ final class SpeechPipelineTests: XCTestCase {
         XCTAssertEqual(intruder.urls.count, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: intruder.urls[0].path), "the dropped quip's file is deleted")
         XCTAssertEqual(settings.recentQuips, ["Typical."], "remembered even though dropped, it was generated")
+    }
+
+    // MARK: - Activity, for ducking the background stream (blether-UkLWZ.16.3)
+
+    func testAReplyCountsAsActivityWhileWorkedOnAndNotAfter() async {
+        let peeking = ActivityPeekingProvider(activity: activity)
+        await pipeline(provider: peeking).speak(long)
+        XCTAssertFalse(peeking.seen.isEmpty)
+        XCTAssertEqual(Set(peeking.seen), [1])
+        XCTAssertEqual(activity.inFlight, 0)
+    }
+
+    func testSpeakingOffLeavesNoActivity() async {
+        settings.isEnabled = false
+        await pipeline().speak(long)
+        XCTAssertEqual(activity.inFlight, 0)
+    }
+
+    func testAQuipCountsAsActivityWhileWorkedOnAndNotAfter() async {
+        let peeking = ActivityPeekingProvider(activity: activity)
+        await pipeline(provider: peeking).quip()
+        XCTAssertEqual(peeking.seen, [1])
+        XCTAssertEqual(activity.inFlight, 0)
+    }
+
+    func testADroppedQuipLeavesNoActivity() async {
+        await pipeline().speak(long)
+        XCTAssertTrue(queue.isPlaying)
+        await pipeline().quip()
+        XCTAssertEqual(activity.inFlight, 0)
     }
 }
