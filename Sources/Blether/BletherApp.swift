@@ -204,6 +204,14 @@ struct BletherApp: App {
     }
 
     /// A plain `$settings.isEnabled` cannot carry the stop side effect, hence the hand-built binding.
+    /// Gives blether a Dock icon and a place in cmd+tab while Settings is open; the Settings scene's
+    /// onDisappear takes them away again. Without activating, the window opens behind everything.
+    private func showSettings() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        openSettings()
+    }
+
     private var speaking: Binding<Bool> {
         Binding(get: { settings.isEnabled }, set: { setSpeaking($0, settings: settings, queue: queue) })
     }
@@ -263,8 +271,7 @@ struct BletherApp: App {
             // answered reply, never while the menu is open.
             if !settings.llmHasAnswered {
                 Button("No LLM has answered yet, so replies are read raw. Pick one in Settings, LLM.") {
-                    NSApp.activate(ignoringOtherApps: true)
-                    openSettings()
+                    showSettings()
                 }
                 Divider()
             }
@@ -291,9 +298,7 @@ struct BletherApp: App {
             .globalKeyboardShortcut(.stopTalking)
             Divider()
             Button("Settings...") {
-                // Without activating first, the window opens behind everything under LSUIElement.
-                NSApp.activate(ignoringOtherApps: true)
-                openSettings()
+                showSettings()
             }
             Button("Quit blether") {
                 NSApplication.shared.terminate(nil)
@@ -314,6 +319,7 @@ struct BletherApp: App {
         }
         Settings {
             SettingsView(settings: settings, speaking: speaking, listening: listening, streaming: streaming, streamStatus: appState.streamStatus, registry: registry)
+                .onDisappear { NSApp.setActivationPolicy(.accessory) }
         }
     }
 }
