@@ -41,9 +41,11 @@ final class ReplyPlannerTests: XCTestCase {
         XCTAssertEqual(classifier.counter.calls, 0)
     }
 
-    func testMarkupHintIsAppendedToTheSummaryPromptOnlyWhenGiven() async {
+    func testMarkupHintReplacesTheNoTagsRuleOnlyWhenGiven() async {
         _ = await planner.plan(long, monologuePersona: nil, mainPersona: nil, includePreamble: false, includeMain: true, mainCap: 800, markupHint: "You may wrap a span in [sighs].")
-        XCTAssertTrue(llm.calls[0].system.hasSuffix("You may wrap a span in [sighs]."), llm.calls[0].system)
+        XCTAssertTrue(llm.calls[0].system.contains("- You may wrap a span in [sighs]."), llm.calls[0].system)
+        XCTAssertFalse(llm.calls[0].system.contains("inline tags or markup"), "a hint and the no-tags rule never share a prompt")
+        XCTAssertTrue(Prompts.summary.contains("inline tags or markup"))
         _ = await plan(long, preamble: false)
         XCTAssertFalse(llm.calls[1].system.contains("[sighs]"))
         XCTAssertEqual(llm.calls[1].system, Prompts.summary, "no persona, no hint: the bare prompt")

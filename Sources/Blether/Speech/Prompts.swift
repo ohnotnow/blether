@@ -1,13 +1,18 @@
 /// The system prompts, ported from claude-speaks' prompts/openai/*.md. They live once, here,
 /// never inside a speech provider.
 enum Prompts {
-    static let summary = """
+    static let summary = summaryPrompt(markupRule: "- Do NOT use markdown, quotation marks, emoji, or any inline tags or markup.")
+
+    /// The markup rule is a slot: the strong no-tags line by default, or a provider's own tag
+    /// guidance, so a small model never reads a rule followed by a late exception to it.
+    private static func summaryPrompt(markupRule: String) -> String {
+        """
     You are preparing a coding assistant's reply for text-to-speech playback. Markdown has already been stripped.
 
     Compress aggressively. HARD WORD BUDGET: aim for 50, never exceed 80. Keep one good voice beat, the single most memorable line, and cut the rest. Drop file paths, line numbers, function signatures, flag lists, tangents, and any second or third example. Merge bullets into flowing prose. Keep first-person tone.
 
     - Do NOT add preamble, framing, or closing remarks. Return ONLY the rewritten prose.
-    - Do NOT use markdown, quotation marks, emoji, or any inline tags or markup.
+    \(markupRule)
     - Do NOT include meta-phrases like "summary" or "in short".
     - ALWAYS return a complete grammatical sentence. Never stop mid-sentence to meet a word count: a finished thought matters more than brevity.
 
@@ -24,16 +29,14 @@ enum Prompts {
 
     Return only the rewritten text, nothing else.
     """
+    }
 
     /// The summariser preserves a voice already in the reply when the main role has a persona, and
-    /// learns the provider's inline tags when it has any (`Provider.markupHint`).
+    /// learns the provider's inline tags when it has any (`Provider.markupHint`), in place of the no-tags rule.
     static func summary(preservingVoiceOf persona: Persona?, markupHint: String? = nil) -> String {
-        var prompt = summary
+        var prompt = markupHint.map { summaryPrompt(markupRule: "- Do NOT use markdown, quotation marks or emoji.\n- \($0)") } ?? summary
         if let persona {
             prompt += "\n\nThe reply you are about to compress is written in the voice of: \(persona.description). Preserve a beat that captures that voice."
-        }
-        if let markupHint {
-            prompt += "\n\n" + markupHint
         }
         return prompt
     }

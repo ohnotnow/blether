@@ -364,7 +364,7 @@ final class SpeechPipelineTests: XCTestCase {
         await registryPipeline().speak(long)
         let main = second.calls.first { $0.voice == "v-main" }
         XCTAssertLessThanOrEqual(main!.text.count, 21, "capped at the second provider's 20 plus the ellipsis")
-        XCTAssertTrue(llm.calls.first { $0.system.contains("Compress") }!.system.hasSuffix("You may use [sigh]."))
+        XCTAssertTrue(llm.calls.first { $0.system.contains("Compress") }!.system.contains("- You may use [sigh]."))
     }
 
     // MARK: - Chunks (blether-vNbF9)
