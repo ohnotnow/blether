@@ -25,7 +25,7 @@ final class ElevenLabsProviderTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "xi-api-key"), "el-key")
             let json = try ProviderTestSupport.json(request)
             XCTAssertEqual(json["text"] as? String, "Hello")
-            XCTAssertEqual(json["model_id"] as? String, "eleven_v3")
+            XCTAssertEqual(json["model_id"] as? String, "eleven_v4")
             XCTAssertEqual(json.count, 2)
         }
         let clip = try await provider.synthesise("Hello", voice: "v1", language: "French", tone: nil)
@@ -41,7 +41,7 @@ final class ElevenLabsProviderTests: XCTestCase {
     }
 
     func testMarkupHintNamesTheTags() {
-        XCTAssertTrue(provider.markupHint?.contains("[sigh]") == true)
+        XCTAssertTrue(provider.markupHint?.contains("[sighs]") == true)
         XCTAssertTrue(provider.markupHint?.contains("[deadpan]") == true)
     }
 }

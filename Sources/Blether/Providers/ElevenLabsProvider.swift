@@ -6,7 +6,7 @@ struct ElevenLabsProvider: Provider {
     let name = "elevenlabs"
     /// Billed per character, so the old cap stays.
     let maxMainCharacters = 800
-    static let modelID = "eleven_v3"
+    static let modelID = "eleven_v4"
     static let outputFormat = "mp3_44100_128"
     /// Read at call time so a key saved in Settings is used on the next reply without a relaunch.
     let apiKey: @Sendable () -> String?
@@ -21,7 +21,7 @@ struct ElevenLabsProvider: Provider {
         return list.voices.map { Voice(id: $0.voiceID, name: $0.name, language: $0.labels?["language"] ?? $0.labels?["accent"] ?? "unknown") }
     }
 
-    /// `language` is ignored: eleven_v3 is multilingual and detects it from the text.
+    /// `language` is ignored: eleven_v4 is multilingual and detects it from the text.
     func synthesise(_ text: String, voice: String, language: String?, tone: Tone?) async throws -> AudioClip {
         let url = URL(string: "https://api.elevenlabs.io/v1/text-to-speech/\(voice)?output_format=\(Self.outputFormat)")!
         let data = try await SpeechHTTP.post(url, auth: try auth(), json: Request(text: text, modelID: Self.modelID), session: session)
@@ -63,8 +63,9 @@ struct ElevenLabsProvider: Provider {
         }
     }
 
-    /// Ported from claude-speaks' prompts/elevenlabs/summary.md: the tag list and the sparing rule.
+    /// eleven_v4 has no fixed tag list, so these are examples, not a whitelist. The voice-only rule
+    /// and emphasis by capitals and punctuation come from ElevenLabs' own Enhance prompt.
     static let hint = """
-    The one exception to the no-markup rule: you may drop in one or two ElevenLabs audio tags where they meaningfully aid delivery, a weary moment with [sigh], an aside with [whispers], a wry beat with [laughs] or [deadpan]. Do not over-tag. Tags you MAY use, and ONLY these: emotional states [excited], [nervous], [frustrated], [sorrowful], [calm], [tired]; reactions [sigh], [laughs], [gasps], [gulps], [whispers]; tone cues [cheerfully], [flatly], [deadpan], [playfully], [resigned tone]; cognitive beats [pauses], [hesitates], [stammers]; pacing and emphasis, even more sparingly, [drawn out], [rushed], [deliberate], [emphasized]. Tags are inline, [tag] not <tag>, placed immediately before the span they colour. Most text stays untagged; you almost never need more than two in one reply. Punctuation changes pacing too: ellipses for trailing off, and reach for a tag only when punctuation alone will not carry the beat.
+    DO add up to three ElevenLabs audio tags where they bring the delivery to life: a weary moment with [sighs], an aside with [whispers], a wry beat with [chuckles] or [deadpan]. There is no fixed list: any short word or phrase describing how the voice sounds works, such as [thoughtful], [annoyed], [surprised], [laughing], [clears throat], [exhales sharply] or [short pause]. Tags describe the voice only, never actions ([grinning], [pacing]), music or sound effects. Tags are inline, [tag] not <tag>, placed immediately before or after the words they colour. Never more than three in one reply. Punctuation and capitals carry delivery too: ellipses for trailing off, a CAPITALISED word for stress, an exclamation mark for energy.
     """
 }
