@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-28
+
+### Changed
+- ElevenLabs now uses its `eleven_v4` model.
+- ElevenLabs audio tags are no longer limited to a fixed list: the summariser may add up to three that describe the voice, and use capitals and punctuation for emphasis.
+
+### Fixed
+- The summariser now actually adds ElevenLabs and xAI tags. Its prompt had banned tags outright and only allowed them in an exception at the end, so smaller LLMs never used them.
+
 ## [1.0.0] - 2026-09-27
 
 The first release: a macOS menubar app that speaks Claude Code replies aloud
@@ -24,5 +33,6 @@ and listens for your answer.
 - A background stream player that ducks under speech.
 - Settings window, menubar robot icon, app icon and `make install`.
 
-[Unreleased]: https://github.com/ohnotnow/blether/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/ohnotnow/blether/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ohnotnow/blether/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ohnotnow/blether/releases/tag/v1.0.0
