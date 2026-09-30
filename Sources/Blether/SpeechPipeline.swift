@@ -14,20 +14,30 @@ final class SpeechPipeline: Sendable {
     private let recent: RecentClips
     /// Counts replies and quips being worked on, so the background stream can duck before the voice starts.
     private let activity: SpeechActivity?
+    /// Plays instead of speech while speaking is off, when the user wants it. nil in tests that do not care.
+    private let chime: (any Chiming)?
 
-    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), activity: SpeechActivity? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+    init(registry: ProviderRegistry, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), activity: SpeechActivity? = nil, chime: (any Chiming)? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
         self.registry = registry
         self.queue = queue
         self.settings = settings
         self.ears = ears
         self.recent = recent
         self.activity = activity
+        self.chime = chime
         self.makeLLM = makeLLM
     }
 
     /// One provider for everything; the tests and any single-provider caller.
-    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), activity: SpeechActivity? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
-        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, ears: ears, recent: recent, activity: activity, makeLLM: makeLLM)
+    convenience init(provider: any Provider, queue: PlaybackQueue, settings: AppSettings, ears: (any EarsArming)? = nil, recent: RecentClips = RecentClips(), activity: SpeechActivity? = nil, chime: (any Chiming)? = nil, makeLLM: @escaping @Sendable @MainActor (AppSettings) -> any LLM) {
+        self.init(registry: ProviderRegistry([provider]), queue: queue, settings: settings, ears: ears, recent: recent, activity: activity, chime: chime, makeLLM: makeLLM)
+    }
+
+    /// Speaking is off: the chime, when wanted, is all a reply or a notification gets (blether-6MDjJ).
+    /// It ignores the Notifications toggle, which mutes the spoken quip only.
+    @MainActor private func chimeIfWanted() {
+        guard settings.chimesWhenSilent else { return }
+        chime?.play(settings.chimeSound)
     }
 
     /// Copies a clip about to be played into the recent folder when the toggle is on. Read at
@@ -59,6 +69,7 @@ final class SpeechPipeline: Sendable {
         let isEnabled = await MainActor.run { settings.isEnabled }
         guard isEnabled else {
             Log.log("speaking is off, reply dropped")
+            await chimeIfWanted()
             return
         }
         await MainActor.run { activity?.begin() }
@@ -166,6 +177,7 @@ final class SpeechPipeline: Sendable {
         let snapshot: QuipSnapshot? = await MainActor.run {
             guard settings.isEnabled else {
                 Log.log("speaking is off, notification dropped")
+                chimeIfWanted()
                 return nil
             }
             guard settings.speaksNotifications else {

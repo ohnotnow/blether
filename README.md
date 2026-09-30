@@ -363,6 +363,13 @@ to switch Blether off. Off drops a reply before any LLM call or speech
 work, and the robot's eyes and mouth close. Two smaller switches on the
 General page drop just the preamble or just the reply.
 
+To still know when a session wants you while Blether is quiet, switch on
+"Sound when speaking is off" on the General page. Each reply and each
+Notification event then plays a sound instead: one of the built-in macOS
+sounds, an audio file of your own, or a folder of them, from which Blether
+picks one at random each time. Keep the `Notification` hook installed for
+this: when Claude asks you a question, that is the only hook that fires.
+
 ## Background music
 
 Blether can play a radio stream while you work and get it out of the way

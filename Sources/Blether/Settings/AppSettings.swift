@@ -35,6 +35,8 @@ final class AppSettings {
         static let speaksPreamble = "speaksPreamble"
         static let speaksMainReply = "speaksMainReply"
         static let speaksNotifications = "speaksNotifications"
+        static let chimesWhenSilent = "chimesWhenSilent"
+        static let chimeSound = "chimeSound"
         static let notificationLanguages = "notificationLanguages"
         static let recentQuips = "recentQuips"
         static let uvPath = "uvPath"
@@ -266,6 +268,18 @@ final class AppSettings {
     var speaksNotifications: Bool {
         get { flag(Key.speaksNotifications) }
         set { defaults.set(newValue, forKey: Key.speaksNotifications); revision += 1 }
+    }
+
+    /// Off by default. On plays `chimeSound` for each reply and notification while speaking is off (blether-6MDjJ).
+    var chimesWhenSilent: Bool {
+        get { _ = revision; return defaults.bool(forKey: Key.chimesWhenSilent) }
+        set { defaults.set(newValue, forKey: Key.chimesWhenSilent); revision += 1 }
+    }
+
+    /// A built-in sound's name, or the path of the user's own file or folder.
+    var chimeSound: String {
+        get { _ = revision; return defaults.string(forKey: Key.chimeSound) ?? Chime.defaultSound }
+        set { defaults.set(newValue, forKey: Key.chimeSound); revision += 1 }
     }
 
     /// The languages a notification line may be written in, one per line with an optional weight,

@@ -25,6 +25,8 @@ struct GeneralSection: View {
     var body: some View {
         Section {
             SettingToggle("Speaking", "Off drops every reply before any LLM or speech work.", isOn: speaking)
+            SettingToggle("Sound when speaking is off", "On plays a sound instead, for each reply and each notification, so you still know a session wants you. Off stays silent.", isOn: $settings.chimesWhenSilent)
+            ChimePicker(settings: settings)
             SettingToggle("Preamble", "Off skips the in-character line before the reply.", isOn: $settings.speaksPreamble)
             SettingToggle("Reply", "Off plays only the preamble.", isOn: $settings.speaksMainReply)
             SettingToggle("Notifications", "Off ignores Claude Code's Notification events. On speaks a short in-character line when Claude is waiting for you.", isOn: $settings.speaksNotifications)

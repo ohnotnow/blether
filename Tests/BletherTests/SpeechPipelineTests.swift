@@ -96,6 +96,12 @@ final class FakeEars: EarsArming {
 }
 
 @MainActor
+final class FakeChime: Chiming {
+    private(set) var played: [String] = []
+    func play(_ sound: String) { played.append(sound) }
+}
+
+@MainActor
 final class SpeechPipelineTests: XCTestCase {
     private let fakes = FakePlayers()
     private var players: [FakePlayer] { fakes.all }
@@ -118,6 +124,7 @@ final class SpeechPipelineTests: XCTestCase {
     }
 
     private let ears = FakeEars()
+    private let chime = FakeChime()
     private let activity = SpeechActivity()
     private let session = SessionKey(id: "s-1", pid: 77)
 
@@ -126,7 +133,7 @@ final class SpeechPipelineTests: XCTestCase {
 
     private func pipeline(provider: (any Provider)? = nil) -> SpeechPipeline {
         let llm = llm
-        return SpeechPipeline(provider: provider ?? self.provider, queue: queue, settings: settings, ears: ears, recent: RecentClips(directory: recentDirectory), activity: activity) { [weak self] _ in
+        return SpeechPipeline(provider: provider ?? self.provider, queue: queue, settings: settings, ears: ears, recent: RecentClips(directory: recentDirectory), activity: activity, chime: chime) { [weak self] _ in
             MainActor.assumeIsolated { self?.makeLLMCalls += 1 }
             return llm
         }
@@ -458,6 +465,42 @@ final class SpeechPipelineTests: XCTestCase {
         XCTAssertTrue(llm.calls.isEmpty)
         XCTAssertTrue(provider.calls.isEmpty)
         XCTAssertEqual(makeLLMCalls, 0)
+    }
+
+    // MARK: - The sound when speaking is off (blether-6MDjJ)
+
+    func testSpeakingOffPlaysTheChimeForAReplyAndANotification() async {
+        settings.isEnabled = false
+        settings.chimesWhenSilent = true
+        settings.chimeSound = "/sounds/hey-there"
+        await pipeline().speak(long)
+        await pipeline().quip()
+        XCTAssertEqual(chime.played, ["/sounds/hey-there", "/sounds/hey-there"])
+        XCTAssertTrue(llm.calls.isEmpty)
+        XCTAssertEqual(makeLLMCalls, 0)
+    }
+
+    func testChimeOffStaysSilentWhenSpeakingIsOff() async {
+        settings.isEnabled = false
+        await pipeline().speak(long)
+        await pipeline().quip()
+        XCTAssertEqual(chime.played, [])
+    }
+
+    func testSpeakingOnNeverChimes() async {
+        settings.chimesWhenSilent = true
+        await pipeline().speak(long)
+        await pipeline().quip()
+        XCTAssertEqual(chime.played, [])
+    }
+
+    /// The Notifications toggle mutes the spoken quip only; it must not cancel the fallback.
+    func testTheChimeIgnoresTheNotificationsToggle() async {
+        settings.isEnabled = false
+        settings.speaksNotifications = false
+        settings.chimesWhenSilent = true
+        await pipeline().quip()
+        XCTAssertEqual(chime.played, [Chime.defaultSound])
     }
 
     func testNotificationsOffDropsTheQuip() async {
